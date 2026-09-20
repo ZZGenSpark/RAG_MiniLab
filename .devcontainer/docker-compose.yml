@@ -1,0 +1,6 @@
+services:
+  rag:
+    command: sleep infinity
+    volumes:
+      - ..:/app
+      - chroma_data:/app/chroma_db

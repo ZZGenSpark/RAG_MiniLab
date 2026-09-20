@@ -1,0 +1,16 @@
+services:
+  rag:
+    build: .
+    env_file:
+      - .env
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      OLLAMA_HOST: http://host.docker.internal:11434
+      CHROMA_PATH: /app/chroma_db
+    volumes:
+      - chroma_data:/app/chroma_db
+    working_dir: /app
+
+volumes:
+  chroma_data:
