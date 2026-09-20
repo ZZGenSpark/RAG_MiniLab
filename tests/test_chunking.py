@@ -3,6 +3,7 @@ from pathlib import Path
 import pytest
 
 from rag.chunking import chunk_policy, chunk_policy_file
+from rag.schema import PolicyChunk
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 POLICY_PATH = REPO_ROOT / "policy.md"
@@ -78,7 +79,7 @@ def test_policy_file_produces_exactly_six_chunks() -> None:
 
 def test_chunks_have_stable_ids_and_required_metadata() -> None:
     chunks = chunk_policy_file(POLICY_PATH)
-    assert chunks == EXPECTED_CHUNKS
+    assert chunks == [PolicyChunk.model_validate(row) for row in EXPECTED_CHUNKS]
 
 
 def test_chunk_text_is_the_full_original_section_body() -> None:
@@ -86,9 +87,9 @@ def test_chunk_text_is_the_full_original_section_body() -> None:
     chunks = chunk_policy(source)
 
     for chunk in chunks:
-        assert chunk["text"] in source
-        assert f"## {chunk['section']}. {chunk['section_title']}" not in chunk["text"]
-        assert chunk["document"] not in chunk["text"]
+        assert chunk.text in source
+        assert f"## {chunk.section}. {chunk.section_title}" not in chunk.text
+        assert chunk.document not in chunk.text
 
 
 def test_chunks_do_not_cut_sentences_in_half() -> None:
@@ -106,17 +107,17 @@ def test_chunks_do_not_cut_sentences_in_half() -> None:
         "Expense reports must be submitted within 30 days after travel ends.",
     ]
 
-    combined = "\n".join(chunk["text"] for chunk in chunks)
+    combined = "\n".join(chunk.text for chunk in chunks)
     for sentence in sentences:
         assert sentence in combined
         assert not any(
-            sentence[: len(sentence) // 2] in chunk["text"] and sentence not in chunk["text"]
+            sentence[: len(sentence) // 2] in chunk.text and sentence not in chunk.text
             for chunk in chunks
         )
 
     for chunk in chunks:
-        assert chunk["text"][-1] in ".!?"
-        assert chunk["text"][0].isupper()
+        assert chunk.text[-1] in ".!?"
+        assert chunk.text[0].isupper()
 
 
 def test_missing_title_is_rejected() -> None:

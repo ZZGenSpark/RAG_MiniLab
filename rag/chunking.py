@@ -2,9 +2,8 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import TypedDict
 
-CHUNK_ID_PREFIX = "expense-policy"
+from rag.schema import CHUNK_ID_PREFIX, PolicyChunk
 
 TITLE_RE = re.compile(
     r"^#\s+(?P<document>.+?)\s+[—–-]\s+Version\s+(?P<version>\d+(?:\.\d+)?)\s*$",
@@ -15,15 +14,6 @@ SECTION_HEADING_RE = re.compile(
     re.MULTILINE,
 )
 SENTENCE_END_RE = re.compile(r"[.!?]$")
-
-
-class PolicyChunk(TypedDict):
-    chunk_id: str
-    document: str
-    version: str
-    section: str
-    section_title: str
-    text: str
 
 
 def chunk_id_for(version: str, section: str) -> str:
@@ -51,14 +41,14 @@ def chunk_policy(markdown: str) -> list[PolicyChunk]:
 
         section = heading.group("section")
         chunks.append(
-            {
-                "chunk_id": chunk_id_for(version, section),
-                "document": document,
-                "version": version,
-                "section": section,
-                "section_title": heading.group("section_title"),
-                "text": text,
-            }
+            PolicyChunk(
+                chunk_id=chunk_id_for(version, section),
+                document=document,
+                version=version,
+                section=section,
+                section_title=heading.group("section_title"),
+                text=text,
+            )
         )
     return chunks
 
