@@ -128,6 +128,18 @@ class RetrievedChunk(PolicyChunk):
         return RetrievedChunkRef(section=self.citation_section, distance=self.distance)
 
 
+REFUSAL_ANSWER = "The provided policy does not answer this question."
+
+
+class GroundedModelOutput(BaseModel):
+    """JSON the generation model is asked to return."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    answer: str = Field(min_length=1)
+    section: str | None = None
+
+
 class AskResponse(BaseModel):
     """Structured output required by the assignment."""
 
