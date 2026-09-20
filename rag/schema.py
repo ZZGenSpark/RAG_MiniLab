@@ -132,12 +132,12 @@ REFUSAL_ANSWER = "The provided policy does not answer this question."
 
 
 class GroundedModelOutput(BaseModel):
-    """JSON the generation model is asked to return."""
+    """JSON the generation model is asked to return for a single excerpt."""
 
     model_config = ConfigDict(extra="ignore")
 
-    answer: str = Field(min_length=1)
-    section: str | None = None
+    answerable: bool
+    answer: str = ""
 
 
 class AskResponse(BaseModel):

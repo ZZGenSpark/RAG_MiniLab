@@ -45,19 +45,27 @@ DEADLINE = _chunk(
 
 
 class FakeChat:
-    def __init__(self, content: str) -> None:
-        self.content = content
+    """Returns one response per call, in order. The last response repeats if
+    more calls happen than responses were supplied."""
+
+    def __init__(self, *responses: str) -> None:
+        self.responses = list(responses)
         self.prompts: list[str] = []
 
     def chat(self, model: str, messages: list, **kwargs):
         self.prompts.append(messages[0]["content"])
-        return SimpleNamespace(message=SimpleNamespace(content=self.content))
+        index = min(len(self.prompts) - 1, len(self.responses) - 1)
+        content = self.responses[index]
+        return SimpleNamespace(message=SimpleNamespace(content=content))
 
 
 class FakeEmbedderClient:
     def embed(self, model: str, input: str | list[str]):
         texts = input if isinstance(input, list) else [input]
         return SimpleNamespace(embeddings=[[1.0, 0.0, 0.0] for _ in texts])
+
+
+NOT_ANSWERABLE = '{"answerable": false, "answer": ""}'
 
 
 def _as_policy_chunk(chunk: RetrievedChunk) -> PolicyChunk:
@@ -80,12 +88,12 @@ def _store_with_meals(tmp_path) -> PolicyStore:
     return store
 
 
-def test_supported_answer_uses_only_retrieved_evidence_and_cites_section() -> None:
-    generator = Generator(
-        client=FakeChat(
-            '{"answer": "Employees may claim up to $65 per day for meals.", "section": "1. Meals"}'
-        )
+def test_closest_chunk_answers_in_a_single_call() -> None:
+    chat = FakeChat(
+        '{"answerable": true, "answer": "Employees may claim up to $65 per day for meals."}'
     )
+    generator = Generator(client=chat)
+
     answer, citation = generate_answer(
         "How much can I spend on food each day?",
         [MEALS, HOTELS, DEADLINE],
@@ -97,46 +105,55 @@ def test_supported_answer_uses_only_retrieved_evidence_and_cites_section() -> No
     assert citation.document == "Employee Expense Policy"
     assert citation.version == "2.0"
     assert citation.section == "1. Meals"
+    # Only the closest chunk needed to be checked.
+    assert len(chat.prompts) == 1
+
+
+def test_falls_back_to_next_closest_chunk_when_first_cannot_answer() -> None:
+    chat = FakeChat(
+        NOT_ANSWERABLE,
+        '{"answerable": true, "answer": "A manager must approve rates above $225 per night."}',
+    )
+    generator = Generator(client=chat)
+
+    answer, citation = generate_answer(
+        "My hotel costs $250. What do I need?",
+        [MEALS, HOTELS, DEADLINE],
+        generator=generator,
+    )
+
+    assert "manager" in answer.lower()
+    assert citation is not None
+    assert citation.section == "2. Hotels"
+    # First (closest) chunk was tried and rejected before falling back.
+    assert len(chat.prompts) == 2
+    assert "1. Meals" in chat.prompts[0]
+    assert "2. Hotels" in chat.prompts[1]
 
 
 def test_unsupported_question_refuses_without_citation() -> None:
+    chat = FakeChat(NOT_ANSWERABLE)
     answer, citation = generate_answer(
         "Does the company reimburse professional conference tickets?",
         [MEALS, HOTELS, DEADLINE],
-        generator=Generator(
-            client=FakeChat(
-                '{"answer": "The provided policy does not answer this question.", "section": null}'
-            )
-        ),
+        generator=Generator(client=chat),
     )
     assert answer == REFUSAL_ANSWER
     assert citation is None
+    # Every chunk was tried before refusing.
+    assert len(chat.prompts) == 3
 
 
 def test_gym_membership_is_an_unsupported_question_example() -> None:
+    chat = FakeChat(NOT_ANSWERABLE)
     answer, citation = generate_answer(
         "Does the company reimburse gym memberships?",
         [MEALS, HOTELS, DEADLINE],
-        generator=Generator(
-            client=FakeChat(
-                '{"answer": "The provided policy does not answer this question.", "section": null}'
-            )
-        ),
+        generator=Generator(client=chat),
     )
     assert answer == REFUSAL_ANSWER
     assert citation is None
-
-
-def test_invented_section_is_treated_as_unsupported() -> None:
-    answer, citation = generate_answer(
-        "How much can I spend on food each day?",
-        [MEALS, HOTELS, DEADLINE],
-        generator=Generator(
-            client=FakeChat('{"answer": "Employees get a gym stipend.", "section": "9. Wellness"}')
-        ),
-    )
-    assert answer == REFUSAL_ANSWER
-    assert citation is None
+    assert len(chat.prompts) == 3
 
 
 def test_empty_retrieval_refuses_without_calling_the_model() -> None:
@@ -156,7 +173,7 @@ def test_empty_retrieval_refuses_without_calling_the_model() -> None:
 def test_ask_builds_structured_response_from_retrieval_not_the_model(tmp_path) -> None:
     store = _store_with_meals(tmp_path)
     chat = FakeChat(
-        '{"answer": "Employees may claim up to $65 per day for meals.", "section": "1. Meals"}'
+        '{"answerable": true, "answer": "Employees may claim up to $65 per day for meals."}'
     )
 
     response = ask(
@@ -174,4 +191,3 @@ def test_ask_builds_structured_response_from_retrieval_not_the_model(tmp_path) -
     )
     assert all(isinstance(chunk.distance, float) for chunk in response.retrieved_chunks)
     assert "1. Meals" in {chunk.section for chunk in response.retrieved_chunks}
-    assert "9. Wellness" not in chat.prompts[0]
