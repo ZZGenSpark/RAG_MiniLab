@@ -2,7 +2,7 @@
   "name": "Mini RAG Lab",
   "dockerComposeFile": ["../docker-compose.yml", "docker-compose.yml"],
   "service": "rag",
-  "workspaceFolder": "/app/RAG_MiniLab",
+  "workspaceFolder": "/app",
   "shutdownAction": "stopCompose",
   "initializeCommand": "sh -c 'test -f .env || cp .env.example .env'",
   "customizations": {
