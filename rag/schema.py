@@ -119,6 +119,15 @@ class RetrievedChunkRef(BaseModel):
     distance: float
 
 
+class RetrievedChunk(PolicyChunk):
+    """A ranked policy excerpt returned by cosine retrieval."""
+
+    distance: float
+
+    def to_ref(self) -> RetrievedChunkRef:
+        return RetrievedChunkRef(section=self.citation_section, distance=self.distance)
+
+
 class AskResponse(BaseModel):
     """Structured output required by the assignment."""
 

@@ -1,6 +1,7 @@
 from rag.chunking import chunk_policy, chunk_policy_file
 from rag.embeddings import Embedder
 from rag.ingest import ingest_policy
+from rag.retrieve import retrieve
 from rag.schema import (
     COLLECTION_NAME,
     DISTANCE_SPACE,
@@ -8,6 +9,7 @@ from rag.schema import (
     Citation,
     EmbeddedChunk,
     PolicyChunk,
+    RetrievedChunk,
     RetrievedChunkRef,
 )
 from rag.store import PolicyStore
@@ -21,8 +23,10 @@ __all__ = [
     "EmbeddedChunk",
     "PolicyChunk",
     "PolicyStore",
+    "RetrievedChunk",
     "RetrievedChunkRef",
     "chunk_policy",
     "chunk_policy_file",
     "ingest_policy",
+    "retrieve",
 ]

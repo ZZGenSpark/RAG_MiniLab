@@ -13,6 +13,7 @@ from rag.schema import (
     DISTANCE_SPACE,
     EmbeddedChunk,
     PolicyChunk,
+    RetrievedChunk,
     to_chroma_records,
 )
 
@@ -52,6 +53,44 @@ class PolicyStore:
     def count(self) -> int:
         return self.collection.count()
 
+    def query_similar(
+        self,
+        embedding: Sequence[float],
+        n_results: int = 3,
+    ) -> list[RetrievedChunk]:
+        available = self.count()
+        if available == 0:
+            return []
+
+        result = self.collection.query(
+            query_embeddings=[list(embedding)],
+            n_results=min(n_results, 3, available),
+            include=["documents", "metadatas", "distances"],
+        )
+        ids = _first_query_row(result["ids"])
+        documents = _first_query_row(result["documents"])
+        metadatas = _first_query_row(result["metadatas"])
+        distances = _first_query_row(result["distances"])
+
+        hits: list[RetrievedChunk] = []
+        for chunk_id, text, metadata, distance in zip(
+            ids, documents, metadatas, distances, strict=True
+        ):
+            if text is None or metadata is None or distance is None:
+                raise ValueError(f"retrieved record {chunk_id} is missing text, metadata, or distance")
+            hits.append(
+                RetrievedChunk.model_validate(
+                    {
+                        "chunk_id": chunk_id,
+                        "text": text,
+                        **dict(metadata),
+                        "distance": float(distance),
+                    }
+                )
+            )
+        hits.sort(key=lambda hit: hit.distance)
+        return hits
+
     def get_all(self) -> list[EmbeddedChunk]:
         result = self.collection.get(include=["documents", "metadatas", "embeddings"])
         records: list[EmbeddedChunk] = []
@@ -75,3 +114,10 @@ class PolicyStore:
             )
         records.sort(key=lambda record: int(record.section))
         return records
+
+
+def _first_query_row(value) -> list:
+    if value is None or len(value) == 0:
+        return []
+    row = value[0]
+    return list(row) if row is not None else []
