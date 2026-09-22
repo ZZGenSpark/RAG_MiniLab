@@ -1,0 +1,16 @@
+{
+  "name": "Mini RAG Lab",
+  "dockerComposeFile": ["../docker-compose.yml", "docker-compose.yml"],
+  "service": "rag",
+  "workspaceFolder": "/app",
+  "shutdownAction": "stopCompose",
+  "initializeCommand": "sh -c 'test -f .env || cp .env.example .env'",
+  "customizations": {
+    "vscode": {
+      "extensions": ["ms-python.python", "ms-python.vscode-pylance"],
+      "settings": {
+        "python.defaultInterpreterPath": "/usr/local/bin/python"
+      }
+    }
+  }
+}
