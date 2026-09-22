@@ -16,9 +16,11 @@ In the Docker/devcontainer setup, Ollama is reached at `http://host.docker.inter
 python ingest.py
 ```
 
-Reads `policy.md`, creates six structural chunks, embeds each section, and upserts text + vector + metadata into the `expense_policy` Chroma collection (cosine space). Re-running upserts the same stable IDs.
+Reads `source/policy.md`, creates six structural chunks, embeds each section, and upserts text + vector + metadata into the `expense_policy` Chroma collection (cosine space). Re-running upserts the same stable IDs.
 
-Optional: `python ingest.py --policy policy.md --chroma-path /path/to/chroma`
+Source documents live in `source/`. Ingest currently loads the expense policy at `source/policy.md`.
+
+Optional: `python ingest.py --policy source/policy.md --chroma-path /path/to/chroma`
 
 ## Ask
 

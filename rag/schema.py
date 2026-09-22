@@ -1,11 +1,16 @@
+"""Data models for policy chunks, citations, and ask responses.
+
+Defines the Chroma record shape and checks ids, metadata, and ranking.
+"""
+
 from __future__ import annotations
 
 from typing import Sequence
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-COLLECTION_NAME = "expense_policy"
-DISTANCE_SPACE = "cosine"
+from config import COLLECTION_NAME, DISTANCE_SPACE
+
 COLLECTION_METADATA = {"hnsw:space": DISTANCE_SPACE}
 CHUNK_ID_PREFIX = "expense-policy"
 
@@ -22,6 +27,7 @@ class ChunkMetadata(BaseModel):
 
     @property
     def citation_section(self) -> str:
+        """Return the numbered section label used in citations."""
         return f"{self.section}. {self.section_title}"
 
 
@@ -36,12 +42,14 @@ class PolicyChunk(ChunkMetadata):
 
     @model_validator(mode="after")
     def chunk_id_matches_version_and_section(self) -> PolicyChunk:
+        """Require the chunk id to encode the version and section."""
         expected = f"{CHUNK_ID_PREFIX}:v{self.version}:section-{self.section}"
         if self.chunk_id != expected:
             raise ValueError(f"chunk_id must be {expected}")
         return self
 
     def to_metadata(self) -> ChunkMetadata:
+        """Return the citation fields stored with this chunk."""
         return ChunkMetadata(
             document=self.document,
             version=self.version,
@@ -63,6 +71,7 @@ class EmbeddedChunk(PolicyChunk):
         metadata: dict[str, object],
         embedding: Sequence[float],
     ) -> EmbeddedChunk:
+        """Build an embedded chunk from a stored Chroma record."""
         return cls.model_validate(
             {
                 "chunk_id": chunk_id,
@@ -85,6 +94,7 @@ class ChromaRecords(BaseModel):
 
     @model_validator(mode="after")
     def aligned_record_fields(self) -> ChromaRecords:
+        """Require ids, documents, embeddings, and metadata to match in length."""
         lengths = {
             len(self.ids),
             len(self.documents),
@@ -96,6 +106,7 @@ class ChromaRecords(BaseModel):
         return self
 
     def as_upsert(self) -> dict[str, list]:
+        """Return the fields Chroma expects for an upsert."""
         return {
             "ids": self.ids,
             "documents": self.documents,
@@ -125,6 +136,7 @@ class RetrievedChunk(PolicyChunk):
     distance: float
 
     def to_ref(self) -> RetrievedChunkRef:
+        """Return the section label and distance for an ask response."""
         return RetrievedChunkRef(section=self.citation_section, distance=self.distance)
 
 
@@ -152,6 +164,7 @@ class AskResponse(BaseModel):
     @field_validator("retrieved_chunks")
     @classmethod
     def distances_are_sorted(cls, chunks: list[RetrievedChunkRef]) -> list[RetrievedChunkRef]:
+        """Require retrieved chunks to be ordered by ascending distance."""
         distances = [chunk.distance for chunk in chunks]
         if distances != sorted(distances):
             raise ValueError("retrieved_chunks must be sorted by cosine distance ascending")
@@ -162,6 +175,7 @@ def to_chroma_records(
     chunks: Sequence[PolicyChunk],
     embeddings: Sequence[Sequence[float]],
 ) -> ChromaRecords:
+    """Pair chunks with embeddings into one Chroma upsert payload."""
     if len(chunks) != len(embeddings):
         raise ValueError("each chunk must have exactly one embedding vector")
 

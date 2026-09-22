@@ -1,10 +1,12 @@
+"""Test grounded answers, fallbacks, and refusals with fake models."""
+
 from types import SimpleNamespace
 
+from adapter.chroma_store import ChromaPolicyStore
+from adapter.ollama_chat import OllamaChatAdapter
 from rag.ask import ask
-from rag.embeddings import Embedder
-from rag.generate import REFUSAL_ANSWER, Generator, generate_answer
+from rag.generate import REFUSAL_ANSWER, generate_answer
 from rag.schema import PolicyChunk, RetrievedChunk
-from rag.store import PolicyStore
 
 
 def _chunk(
@@ -13,6 +15,7 @@ def _chunk(
     text: str,
     distance: float,
 ) -> RetrievedChunk:
+    """Build a retrieved chunk fixture for generation tests."""
     return RetrievedChunk(
         chunk_id=f"expense-policy:v2.0:section-{section}",
         document="Employee Expense Policy",
@@ -44,31 +47,37 @@ DEADLINE = _chunk(
 )
 
 
-class FakeChat:
+class FakeGenerator:
     """Returns one response per call, in order. The last response repeats if
     more calls happen than responses were supplied."""
 
     def __init__(self, *responses: str) -> None:
+        """Store the scripted responses in call order."""
         self.responses = list(responses)
         self.prompts: list[str] = []
 
-    def chat(self, model: str, messages: list, **kwargs):
-        self.prompts.append(messages[0]["content"])
+    def complete(self, prompt: str) -> str:
+        """Record the prompt and return the next scripted response."""
+        self.prompts.append(prompt)
         index = min(len(self.prompts) - 1, len(self.responses) - 1)
-        content = self.responses[index]
-        return SimpleNamespace(message=SimpleNamespace(content=content))
+        return self.responses[index]
 
 
-class FakeEmbedderClient:
-    def embed(self, model: str, input: str | list[str]):
-        texts = input if isinstance(input, list) else [input]
-        return SimpleNamespace(embeddings=[[1.0, 0.0, 0.0] for _ in texts])
+class FakeEmbedder:
+    def embed_texts(self, texts: list[str]) -> list[list[float]]:
+        """Return a fixed unit vector for each input text."""
+        return [[1.0, 0.0, 0.0] for _ in texts]
+
+    def embed_query(self, text: str) -> list[float]:
+        """Return the embedding vector for a single question."""
+        return self.embed_texts([text])[0]
 
 
 NOT_ANSWERABLE = '{"answerable": false, "answer": ""}'
 
 
 def _as_policy_chunk(chunk: RetrievedChunk) -> PolicyChunk:
+    """Drop retrieval distance so a chunk can be stored."""
     return PolicyChunk(
         chunk_id=chunk.chunk_id,
         document=chunk.document,
@@ -79,8 +88,9 @@ def _as_policy_chunk(chunk: RetrievedChunk) -> PolicyChunk:
     )
 
 
-def _store_with_meals(tmp_path) -> PolicyStore:
-    store = PolicyStore(tmp_path / "chroma")
+def _store_with_meals(tmp_path) -> ChromaPolicyStore:
+    """Create a store containing the meals, hotels, and deadline fixtures."""
+    store = ChromaPolicyStore(tmp_path / "chroma")
     store.upsert_chunks(
         [_as_policy_chunk(MEALS), _as_policy_chunk(HOTELS), _as_policy_chunk(DEADLINE)],
         [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]],
@@ -89,15 +99,15 @@ def _store_with_meals(tmp_path) -> PolicyStore:
 
 
 def test_closest_chunk_answers_in_a_single_call() -> None:
-    chat = FakeChat(
+    """Cite the closest chunk when it alone answers the question."""
+    chat = FakeGenerator(
         '{"answerable": true, "answer": "Employees may claim up to $65 per day for meals."}'
     )
-    generator = Generator(client=chat)
 
     answer, citation = generate_answer(
         "How much can I spend on food each day?",
         [MEALS, HOTELS, DEADLINE],
-        generator=generator,
+        generator=chat,
     )
 
     assert "$65" in answer
@@ -110,16 +120,16 @@ def test_closest_chunk_answers_in_a_single_call() -> None:
 
 
 def test_falls_back_to_next_closest_chunk_when_first_cannot_answer() -> None:
-    chat = FakeChat(
+    """Use the next chunk when the closest one cannot answer."""
+    chat = FakeGenerator(
         NOT_ANSWERABLE,
         '{"answerable": true, "answer": "A manager must approve rates above $225 per night."}',
     )
-    generator = Generator(client=chat)
 
     answer, citation = generate_answer(
         "My hotel costs $250. What do I need?",
         [MEALS, HOTELS, DEADLINE],
-        generator=generator,
+        generator=chat,
     )
 
     assert "manager" in answer.lower()
@@ -132,11 +142,12 @@ def test_falls_back_to_next_closest_chunk_when_first_cannot_answer() -> None:
 
 
 def test_unsupported_question_refuses_without_citation() -> None:
-    chat = FakeChat(NOT_ANSWERABLE)
+    """Refuse without a citation when no chunk can answer."""
+    chat = FakeGenerator(NOT_ANSWERABLE)
     answer, citation = generate_answer(
         "Does the company reimburse professional conference tickets?",
         [MEALS, HOTELS, DEADLINE],
-        generator=Generator(client=chat),
+        generator=chat,
     )
     assert answer == REFUSAL_ANSWER
     assert citation is None
@@ -145,11 +156,12 @@ def test_unsupported_question_refuses_without_citation() -> None:
 
 
 def test_gym_membership_is_an_unsupported_question_example() -> None:
-    chat = FakeChat(NOT_ANSWERABLE)
+    """Refuse the gym-membership question when no excerpt supports it."""
+    chat = FakeGenerator(NOT_ANSWERABLE)
     answer, citation = generate_answer(
         "Does the company reimburse gym memberships?",
         [MEALS, HOTELS, DEADLINE],
-        generator=Generator(client=chat),
+        generator=chat,
     )
     assert answer == REFUSAL_ANSWER
     assert citation is None
@@ -157,30 +169,34 @@ def test_gym_membership_is_an_unsupported_question_example() -> None:
 
 
 def test_empty_retrieval_refuses_without_calling_the_model() -> None:
+    """Refuse immediately when retrieval returns no chunks."""
+
     class ExplodingChat:
-        def chat(self, *args, **kwargs):
+        def complete(self, prompt: str) -> str:
+            """Fail if generation runs with no retrieved excerpts."""
             raise AssertionError("model should not run without retrieved excerpts")
 
     answer, citation = generate_answer(
         "Does the company reimburse gym memberships?",
         [],
-        generator=Generator(client=ExplodingChat()),
+        generator=ExplodingChat(),
     )
     assert answer == REFUSAL_ANSWER
     assert citation is None
 
 
 def test_ask_builds_structured_response_from_retrieval_not_the_model(tmp_path) -> None:
+    """Build the cited response from retrieved chunks, not from the model JSON."""
     store = _store_with_meals(tmp_path)
-    chat = FakeChat(
+    chat = FakeGenerator(
         '{"answerable": true, "answer": "Employees may claim up to $65 per day for meals."}'
     )
 
     response = ask(
         "How much can I spend on food each day?",
         store=store,
-        embedder=Embedder(client=FakeEmbedderClient()),
-        generator=Generator(client=chat),
+        embedder=FakeEmbedder(),
+        generator=chat,
     )
 
     assert response.citation is not None
@@ -191,3 +207,22 @@ def test_ask_builds_structured_response_from_retrieval_not_the_model(tmp_path) -
     )
     assert all(isinstance(chunk.distance, float) for chunk in response.retrieved_chunks)
     assert "1. Meals" in {chunk.section for chunk in response.retrieved_chunks}
+
+
+def test_ollama_chat_adapter_returns_message_text() -> None:
+    """Read the Ollama message body and return it as plain text."""
+
+    class RecordingClient:
+        def chat(self, model: str, messages: list, **kwargs):
+            """Return one scripted chat message and record the call."""
+            self.messages = messages
+            self.kwargs = kwargs
+            return SimpleNamespace(message=SimpleNamespace(content='{"answerable": true, "answer": "$65"}'))
+
+    client = RecordingClient()
+    text = OllamaChatAdapter(model="qwen3:8b", client=client).complete("Question: meals")
+
+    assert text == '{"answerable": true, "answer": "$65"}'
+    assert client.messages == [{"role": "user", "content": "Question: meals"}]
+    assert client.kwargs["think"] is False
+    assert client.kwargs["options"] == {"temperature": 0}

@@ -1,3 +1,11 @@
+"""Public API for the expense-policy RAG pipeline.
+
+Re-exports ingest, retrieval, generation, and the shared schema types.
+"""
+
+from adapter.chroma_store import ChromaPolicyStore
+from adapter.ollama_chat import OllamaChatAdapter
+from adapter.ollama_embeddings import OllamaEmbeddingAdapter
 from rag.ask import ask
 from rag.chunking import chunk_policy, chunk_policy_file
 from rag.embeddings import Embedder
@@ -21,8 +29,11 @@ __all__ = [
     "DISTANCE_SPACE",
     "AskResponse",
     "Citation",
+    "ChromaPolicyStore",
     "Embedder",
     "EmbeddedChunk",
+    "OllamaChatAdapter",
+    "OllamaEmbeddingAdapter",
     "PolicyChunk",
     "PolicyStore",
     "REFUSAL_ANSWER",

@@ -1,3 +1,8 @@
+"""Split policy markdown into one chunk per numbered section.
+
+Each chunk keeps the full section body and a stable id for citations.
+"""
+
 from __future__ import annotations
 
 import re
@@ -17,14 +22,17 @@ SENTENCE_END_RE = re.compile(r"[.!?]$")
 
 
 def chunk_id_for(version: str, section: str) -> str:
+    """Build the stable chunk id for a policy version and section."""
     return f"{CHUNK_ID_PREFIX}:v{version}:section-{section}"
 
 
 def chunk_policy_file(path: str | Path) -> list[PolicyChunk]:
+    """Read a markdown file and return one chunk per numbered section."""
     return chunk_policy(Path(path).read_text(encoding="utf-8"))
 
 
 def chunk_policy(markdown: str) -> list[PolicyChunk]:
+    """Split policy markdown into chunks with document, version, and section metadata."""
     document, version = _parse_document_header(markdown)
     headings = list(SECTION_HEADING_RE.finditer(markdown))
     if not headings:
@@ -54,6 +62,7 @@ def chunk_policy(markdown: str) -> list[PolicyChunk]:
 
 
 def _parse_document_header(markdown: str) -> tuple[str, str]:
+    """Extract the document title and version from the top-level heading."""
     match = TITLE_RE.search(markdown)
     if match is None:
         raise ValueError("policy markdown is missing a '# Title — Version X.Y' heading")
@@ -61,6 +70,7 @@ def _parse_document_header(markdown: str) -> tuple[str, str]:
 
 
 def _assert_sentences_intact(text: str, section: str) -> None:
+    """Reject section text that starts or ends mid-sentence."""
     if not SENTENCE_END_RE.search(text):
         raise ValueError(f"section {section} appears to cut off mid-sentence")
     first_char = text[0]

@@ -1,3 +1,5 @@
+"""Check schema validation for chunk ids, vectors, and ask responses."""
+
 import pytest
 from pydantic import ValidationError
 
@@ -5,6 +7,7 @@ from rag.schema import AskResponse, Citation, EmbeddedChunk, PolicyChunk, Retrie
 
 
 def test_policy_chunk_rejects_unstable_chunk_id() -> None:
+    """Reject a chunk id that does not encode version and section."""
     with pytest.raises(ValidationError, match="chunk_id"):
         PolicyChunk(
             chunk_id="meals-1",
@@ -17,6 +20,7 @@ def test_policy_chunk_rejects_unstable_chunk_id() -> None:
 
 
 def test_embedded_chunk_requires_a_complete_vector() -> None:
+    """Reject an embedded chunk whose vector is empty."""
     with pytest.raises(ValidationError):
         EmbeddedChunk(
             chunk_id="expense-policy:v2.0:section-1",
@@ -30,6 +34,7 @@ def test_embedded_chunk_requires_a_complete_vector() -> None:
 
 
 def test_ask_response_matches_assignment_shape() -> None:
+    """Accept an ask response with a citation and one retrieved chunk."""
     response = AskResponse.model_validate(
         {
             "answer": "Employees may claim up to $65 per day for meals.",
@@ -50,6 +55,7 @@ def test_ask_response_matches_assignment_shape() -> None:
 
 
 def test_unsupported_answer_has_no_citation() -> None:
+    """Allow a refusal answer to omit the citation."""
     response = AskResponse(
         answer="The provided policy does not answer this question.",
         citation=None,
@@ -59,6 +65,7 @@ def test_unsupported_answer_has_no_citation() -> None:
 
 
 def test_retrieved_chunks_are_capped_and_sorted() -> None:
+    """Reject more than three chunks or chunks that are out of distance order."""
     with pytest.raises(ValidationError, match="at most 3"):
         AskResponse(
             answer="Employees may claim up to $65 per day for meals.",

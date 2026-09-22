@@ -1,18 +1,21 @@
+"""Command-line entry point that loads source/policy.md into Chroma."""
+
 from __future__ import annotations
 
 import argparse
 from pathlib import Path
 
-from rag.config import DEFAULT_POLICY_PATH
+from config import POLICY_PATH
 from rag.ingest import ingest_policy
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Ingest policy.md into Chroma with Ollama embeddings.")
+    """Parse CLI arguments and ingest the policy file."""
+    parser = argparse.ArgumentParser(description="Ingest source/policy.md into Chroma with Ollama embeddings.")
     parser.add_argument(
         "--policy",
         type=Path,
-        default=DEFAULT_POLICY_PATH,
+        default=POLICY_PATH,
         help="Path to the policy markdown file.",
     )
     parser.add_argument(

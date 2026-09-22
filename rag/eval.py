@@ -1,3 +1,8 @@
+"""Run the six required policy questions and save their answers.
+
+Compares each answer with the expected citation and required phrases.
+"""
+
 from __future__ import annotations
 
 import argparse
@@ -6,18 +11,17 @@ from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict
 
+from adapter.chroma_store import ChromaPolicyStore
+from config import EVAL_OUTPUT_PATH
 from rag.ask import ask
 from rag.schema import REFUSAL_ANSWER, AskResponse
 from rag.store import PolicyStore
 
 
 def answer_matches(case: "RequiredCase", answer: str) -> bool:
+    """Return whether every expected marker appears in the answer."""
     text = answer.lower()
     return all(marker.lower() in text for marker in case.answer_markers)
-
-
-REPO_ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_OUTPUT_PATH = REPO_ROOT / "outputs" / "required_questions.json"
 
 
 class RequiredCase(BaseModel):
@@ -63,6 +67,7 @@ REQUIRED_CASES = [
 
 
 def run_required_questions(store: PolicyStore | None = None) -> list[dict]:
+    """Ask each required question and return the raw result rows."""
     results = []
     for case in REQUIRED_CASES:
         response = ask(case.question, store=store)
@@ -77,30 +82,34 @@ def run_required_questions(store: PolicyStore | None = None) -> list[dict]:
 
 
 def write_required_questions(
-    path: str | Path = DEFAULT_OUTPUT_PATH,
+    path: str | Path = EVAL_OUTPUT_PATH,
     *,
     store: PolicyStore | None = None,
 ) -> Path:
+    """Run the required questions and write the JSON results."""
     output_path = Path(path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(json.dumps(run_required_questions(store=store), indent=2) + "\n")
     return output_path
 
 
-def load_required_questions(path: str | Path = DEFAULT_OUTPUT_PATH) -> list[dict]:
+def load_required_questions(path: str | Path = EVAL_OUTPUT_PATH) -> list[dict]:
+    """Load previously saved required-question results."""
     return json.loads(Path(path).read_text(encoding="utf-8"))
 
 
 def response_from_result(result: dict) -> AskResponse:
+    """Rebuild an ask response from one saved result row."""
     return AskResponse.model_validate(result["response"])
 
 
 def main() -> None:
+    """Parse CLI arguments and write the required-question results."""
     parser = argparse.ArgumentParser(description="Run the six required questions and save JSON output.")
     parser.add_argument(
         "--output",
         type=Path,
-        default=DEFAULT_OUTPUT_PATH,
+        default=EVAL_OUTPUT_PATH,
         help="Path to write the saved results.",
     )
     parser.add_argument(
@@ -110,7 +119,7 @@ def main() -> None:
         help="Optional Chroma persistence directory. Defaults to CHROMA_PATH.",
     )
     args = parser.parse_args()
-    store = PolicyStore(args.chroma_path) if args.chroma_path else None
+    store = ChromaPolicyStore(args.chroma_path) if args.chroma_path else None
     path = write_required_questions(args.output, store=store)
     print(f"Wrote {path}")
 

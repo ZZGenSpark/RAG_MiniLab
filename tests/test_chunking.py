@@ -1,12 +1,10 @@
-from pathlib import Path
+"""Check that policy markdown becomes six intact, stably identified chunks."""
 
 import pytest
 
+from config import POLICY_PATH
 from rag.chunking import chunk_policy, chunk_policy_file
 from rag.schema import PolicyChunk
-
-REPO_ROOT = Path(__file__).resolve().parents[1]
-POLICY_PATH = REPO_ROOT / "policy.md"
 
 EXPECTED_CHUNKS = [
     {
@@ -73,16 +71,19 @@ EXPECTED_CHUNKS = [
 
 
 def test_policy_file_produces_exactly_six_chunks() -> None:
+    """Confirm the policy file yields exactly six chunks."""
     chunks = chunk_policy_file(POLICY_PATH)
     assert len(chunks) == 6
 
 
 def test_chunks_have_stable_ids_and_required_metadata() -> None:
+    """Confirm each chunk keeps its stable id and citation metadata."""
     chunks = chunk_policy_file(POLICY_PATH)
     assert chunks == [PolicyChunk.model_validate(row) for row in EXPECTED_CHUNKS]
 
 
 def test_chunk_text_is_the_full_original_section_body() -> None:
+    """Confirm chunk text is the original section body without the heading."""
     source = POLICY_PATH.read_text(encoding="utf-8")
     chunks = chunk_policy(source)
 
@@ -93,6 +94,7 @@ def test_chunk_text_is_the_full_original_section_body() -> None:
 
 
 def test_chunks_do_not_cut_sentences_in_half() -> None:
+    """Confirm every policy sentence stays whole inside one chunk."""
     chunks = chunk_policy_file(POLICY_PATH)
     sentences = [
         "Employees may claim up to $65 per day for meals while traveling overnight.",
@@ -121,11 +123,13 @@ def test_chunks_do_not_cut_sentences_in_half() -> None:
 
 
 def test_missing_title_is_rejected() -> None:
+    """Reject markdown that has no document title and version."""
     with pytest.raises(ValueError, match="missing"):
         chunk_policy("## 1. Meals\nEmployees may claim up to $65 per day.\n")
 
 
 def test_empty_section_is_rejected() -> None:
+    """Reject a numbered section that has no body text."""
     markdown = (
         "# Employee Expense Policy — Version 2.0\n\n"
         "## 1. Meals\n"

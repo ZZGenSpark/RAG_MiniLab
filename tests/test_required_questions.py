@@ -1,11 +1,12 @@
-from pathlib import Path
+"""Check the six required questions against saved and live answers."""
 
 import pytest
 
+from adapter.chroma_store import ChromaPolicyStore
+from config import EVAL_OUTPUT_PATH, POLICY_PATH
 from rag.ask import ask
 from rag.chunking import chunk_policy_file
 from rag.eval import (
-    DEFAULT_OUTPUT_PATH,
     REQUIRED_CASES,
     answer_matches,
     load_required_questions,
@@ -13,13 +14,10 @@ from rag.eval import (
 )
 from rag.ingest import ingest_policy
 from rag.schema import REFUSAL_ANSWER, AskResponse
-from rag.store import PolicyStore
-
-REPO_ROOT = Path(__file__).resolve().parents[1]
-POLICY_PATH = REPO_ROOT / "policy.md"
 
 
 def _assert_response_shape(response: AskResponse) -> None:
+    """Require one to three retrieved chunks sorted by distance."""
     assert 0 < len(response.retrieved_chunks) <= 3
     distances = [chunk.distance for chunk in response.retrieved_chunks]
     assert distances == sorted(distances)
@@ -27,6 +25,7 @@ def _assert_response_shape(response: AskResponse) -> None:
 
 
 def _score_required_run(results: list[tuple]) -> dict[str, int]:
+    """Count retrieval hits, citations, and refusals for one required-question run."""
     retrieve_hits = 0
     expected_citations = 0
     supported_with_citation = 0
@@ -62,11 +61,13 @@ def _score_required_run(results: list[tuple]) -> dict[str, int]:
 
 
 def test_policy_still_has_exactly_six_chunks() -> None:
+    """Confirm the policy file still splits into six sections."""
     assert len(chunk_policy_file(POLICY_PATH)) == 6
 
 
 def test_saved_output_covers_all_six_required_questions() -> None:
-    assert DEFAULT_OUTPUT_PATH.exists(), "run `python -m rag.eval` to create outputs/required_questions.json"
+    """Confirm the saved JSON covers every required question at the expected scores."""
+    assert EVAL_OUTPUT_PATH.exists(), "run `python -m rag.eval` to create outputs/required_questions.json"
     rows = load_required_questions()
     assert [row["question"] for row in rows] == [case.question for case in REQUIRED_CASES]
 
@@ -80,16 +81,18 @@ def test_saved_output_covers_all_six_required_questions() -> None:
 
 
 @pytest.fixture(scope="module")
-def live_store(tmp_path_factory: pytest.TempPathFactory) -> PolicyStore:
+def live_store(tmp_path_factory: pytest.TempPathFactory) -> ChromaPolicyStore:
+    """Ingest the policy into a temporary store, or skip if Ollama is down."""
     chroma_path = tmp_path_factory.mktemp("required-chroma")
     try:
         ingest_policy(POLICY_PATH, chroma_path=chroma_path)
     except Exception as exc:
         pytest.skip(f"live Ollama ingest unavailable: {exc}")
-    return PolicyStore(chroma_path)
+    return ChromaPolicyStore(chroma_path)
 
 
-def test_live_required_questions_meet_acceptance(live_store: PolicyStore) -> None:
+def test_live_required_questions_meet_acceptance(live_store: ChromaPolicyStore) -> None:
+    """Confirm a live run meets the retrieval, citation, and refusal thresholds."""
     results = []
     for case in REQUIRED_CASES:
         try:

@@ -1,12 +1,14 @@
+"""Ground an answer in one retrieved policy excerpt.
+
+Asks the chat model whether a single chunk answers the question, then cites that chunk or refuses.
+"""
+
 from __future__ import annotations
 
 import json
 import re
 from typing import Protocol
 
-import ollama
-
-from rag.config import DEFAULT_CHAT_MODEL, DEFAULT_OLLAMA_HOST
 from rag.schema import (
     REFUSAL_ANSWER,
     Citation,
@@ -31,43 +33,25 @@ REFUSAL_MARKERS = (
 )
 
 
-class ChatClient(Protocol):
-    def chat(self, model: str, messages: list, **kwargs): ...
+class Generator(Protocol):
+    """Chat provider that turns one grounded prompt into model text.
 
-
-class Generator:
-    def __init__(
-        self,
-        model: str | None = None,
-        host: str | None = None,
-        client: ChatClient | None = None,
-    ) -> None:
-        self.model = model or DEFAULT_CHAT_MODEL
-        self.client = client or ollama.Client(host=host or DEFAULT_OLLAMA_HOST)
+    A second provider implements complete and returns the raw model string.
+    """
 
     def complete(self, prompt: str) -> str:
-        response = self.client.chat(
-            model=self.model,
-            messages=[{"role": "user", "content": prompt}],
-            format=GroundedModelOutput.model_json_schema(),
-            think=False,
-            options={"temperature": 0},
-        )
-        content = getattr(response, "message", None)
-        text = getattr(content, "content", None) if content is not None else None
-        if not text and isinstance(response, dict):
-            text = response.get("message", {}).get("content")
-        if not text:
-            raise ValueError("generation model returned an empty response")
-        return text
+        """Send one prompt and return the model's text."""
+        ...
 
 
 def build_prompt(question: str, chunk: RetrievedChunk) -> str:
+    """Build the single-excerpt prompt for one question and chunk."""
     excerpt = f"[Section {chunk.citation_section}]\n{chunk.text}"
     return f"{INSTRUCTION}\n\nQuestion: {question}\n\nPolicy excerpt:\n{excerpt}"
 
 
 def is_refusal(answer: str) -> bool:
+    """Return whether the text matches a known refusal phrase."""
     normalized = " ".join(answer.lower().split())
     return any(marker in normalized for marker in REFUSAL_MARKERS)
 
@@ -78,10 +62,14 @@ def generate_answer(
     *,
     generator: Generator | None = None,
 ) -> tuple[str, Citation | None]:
+    """Answer from the closest usable chunk, or refuse when none can."""
     if not chunks:
         return REFUSAL_ANSWER, None
 
-    generator = generator or Generator()
+    if generator is None:
+        from adapter.ollama_chat import OllamaChatAdapter
+
+        generator = OllamaChatAdapter()
 
     # Chunks are already sorted by cosine distance ascending (closest first).
     # Try the closest chunk first; only fall back to a farther chunk if the
@@ -101,6 +89,7 @@ def generate_answer(
 
 
 def _parse_model_output(raw: str) -> GroundedModelOutput:
+    """Parse model JSON, treating known refusal text as unanswerable."""
     text = raw.strip()
     fenced = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, flags=re.DOTALL)
     if fenced:
