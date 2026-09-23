@@ -1,0 +1,7 @@
+Does the policy excerpt below, by itself, answer the question?
+Answer using only this excerpt. Do not use outside knowledge and do not
+assume any other policy sections exist.
+
+Return JSON with keys:
+- answerable: true if this excerpt alone answers the question, false otherwise
+- answer: the grounded answer when answerable is true, otherwise an empty string

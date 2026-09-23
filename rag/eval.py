@@ -12,7 +12,9 @@ from pathlib import Path
 from pydantic import BaseModel, ConfigDict
 
 from adapter.chroma_store import ChromaPolicyStore
-from config import EVAL_OUTPUT_PATH
+from adapter.ollama_chat import OllamaChatAdapter
+from adapter.ollama_embeddings import OllamaEmbeddingAdapter
+from config import CHROMA_PATH, EVAL_OUTPUT_PATH
 from rag.ask import ask
 from rag.schema import REFUSAL_ANSWER, AskResponse
 from rag.store import PolicyStore
@@ -41,12 +43,12 @@ REQUIRED_CASES = [
     RequiredCase(
         question="Can I book first-class airfare?",
         expected_citation="3. Airfare",
-        answer_markers=["approv"],
+        answer_markers=["vice president"],
     ),
     RequiredCase(
         question="My hotel costs $250. What do I need?",
         expected_citation="2. Hotels",
-        answer_markers=["manager", "approv"],
+        answer_markers=["manager", "$225"],
     ),
     RequiredCase(
         question="Do I need a receipt for a $20 taxi?",
@@ -56,7 +58,7 @@ REQUIRED_CASES = [
     RequiredCase(
         question="Can I claim a limousine upgrade?",
         expected_citation="4. Ground Transportation",
-        answer_markers=["cannot"],
+        answer_markers=["cannot claim"],
     ),
     RequiredCase(
         question="Does the company reimburse gym memberships?",
@@ -68,9 +70,17 @@ REQUIRED_CASES = [
 
 def run_required_questions(store: PolicyStore | None = None) -> list[dict]:
     """Ask each required question and return the raw result rows."""
+    policy_store = store or ChromaPolicyStore(CHROMA_PATH)
+    embedder = OllamaEmbeddingAdapter()
+    generator = OllamaChatAdapter()
     results = []
     for case in REQUIRED_CASES:
-        response = ask(case.question, store=store)
+        response = ask(
+            case.question,
+            store=policy_store,
+            embedder=embedder,
+            generator=generator,
+        )
         results.append(
             {
                 "question": case.question,
@@ -119,7 +129,7 @@ def main() -> None:
         help="Optional Chroma persistence directory. Defaults to CHROMA_PATH.",
     )
     args = parser.parse_args()
-    store = ChromaPolicyStore(args.chroma_path) if args.chroma_path else None
+    store = ChromaPolicyStore(args.chroma_path or CHROMA_PATH)
     path = write_required_questions(args.output, store=store)
     print(f"Wrote {path}")
 

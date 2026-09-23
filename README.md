@@ -5,7 +5,7 @@ Grounded expense-policy assistant. Policy text is split into six section chunks,
 ## Prerequisites
 
 - Python 3.12 and the packages in `requirements.txt`
-- Ollama running with `nomic-embed-text` and `qwen3:8b`
+- Ollama running with `nomic-embed-text:v1.5` and `qwen3:8b-q4_K_M`
 - `cp .env.example .env` if `.env` is missing
 
 In the Docker/devcontainer setup, Ollama is reached at `http://host.docker.internal:11434` and Chroma persists at `/app/chroma_db`.
@@ -16,7 +16,7 @@ In the Docker/devcontainer setup, Ollama is reached at `http://host.docker.inter
 python ingest.py
 ```
 
-Reads `source/policy.md`, creates six structural chunks, embeds each section, and upserts text + vector + metadata into the `expense_policy` Chroma collection (cosine space). Re-running upserts the same stable IDs.
+Reads `source/policy.md`, creates six structural chunks, embeds each section, and upserts text + vector + metadata into the `expense_policy` Chroma collection (cosine space). Re-running upserts the same stable IDs and drops sections that are no longer in the file.
 
 Source documents live in `source/`. Ingest currently loads the expense policy at `source/policy.md`.
 
@@ -41,4 +41,8 @@ python -m rag.eval
 
 ## Chroma persistence
 
-Chunks live on disk under `CHROMA_PATH` (default `chroma_db`; `/app/chroma_db` in Docker). The directory is gitignored. Compose mounts it as the `chroma_data` volume. Schema: [rag/schema.py](rag/schema.py) (`expense_policy`, `hnsw:space=cosine`).
+Chunks live on disk under `CHROMA_PATH` (default `<repo>/chroma_db`; `/app/chroma_db` in Docker). The directory is gitignored. Compose mounts it as the `chroma_data` volume. Schema: [rag/schema.py](rag/schema.py) (`expense_policy`, `hnsw:space=cosine`).
+
+## Practice updates
+
+See [docs/practice-updates.md](docs/practice-updates.md).

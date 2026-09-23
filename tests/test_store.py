@@ -2,6 +2,8 @@
 
 from pathlib import Path
 
+import pytest
+
 from adapter.chroma_store import ChromaPolicyStore
 from config import POLICY_PATH
 from rag.chunking import chunk_policy_file
@@ -80,6 +82,70 @@ def test_upsert_is_idempotent_by_stable_chunk_id(tmp_path: Path) -> None:
     store.upsert_chunks(chunks, _embeddings(len(chunks)))
     store.upsert_chunks(chunks, _embeddings(len(chunks)))
     assert store.count() == 6
+
+
+def test_upsert_drops_ids_missing_from_the_batch(tmp_path: Path) -> None:
+    """Delete a stored section that the next ingest no longer includes."""
+    chunks = _chunks()
+    store = ChromaPolicyStore(tmp_path / "chroma")
+    store.upsert_chunks(chunks, _embeddings(len(chunks)))
+
+    store.upsert_chunks(chunks[:5], _embeddings(5))
+
+    assert store.count() == 5
+    assert [record.section for record in store.get_all()] == ["1", "2", "3", "4", "5"]
+
+
+def test_query_can_return_every_stored_chunk(tmp_path: Path) -> None:
+    """Honor n_results above the ask cap of three."""
+    chunks = _chunks()
+    store = ChromaPolicyStore(tmp_path / "chroma")
+    store.upsert_chunks(chunks, _embeddings(len(chunks)))
+
+    hits = store.query_similar([1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], n_results=6)
+
+    assert len(hits) == 6
+
+
+def test_upsert_rejects_a_different_embedding_width(tmp_path: Path) -> None:
+    """Keep the stored vectors when a later batch uses another width."""
+    chunks = _chunks()
+    store = ChromaPolicyStore(tmp_path / "chroma")
+    store.upsert_chunks(chunks, _embeddings(len(chunks)))
+
+    with pytest.raises(ValueError, match="width"):
+        store.upsert_chunks(chunks, _embeddings(len(chunks), dim=4))
+
+    assert store.count() == 6
+
+
+def test_query_rejects_a_different_embedding_width(tmp_path: Path) -> None:
+    """Reject a query vector that does not match the stored width."""
+    chunks = _chunks()
+    store = ChromaPolicyStore(tmp_path / "chroma")
+    store.upsert_chunks(chunks, _embeddings(len(chunks)))
+
+    with pytest.raises(ValueError, match="width"):
+        store.query_similar([1.0, 0.0], n_results=1)
+
+
+def test_store_rejects_a_collection_that_is_not_cosine(tmp_path: Path) -> None:
+    """Fail when an existing collection was created in another distance space."""
+    import chromadb
+
+    path = tmp_path / "chroma"
+    client = chromadb.PersistentClient(path=str(path))
+    client.get_or_create_collection(name=COLLECTION_NAME, metadata={"hnsw:space": "l2"})
+
+    with pytest.raises(ValueError, match="cosine"):
+        ChromaPolicyStore(path)
+
+
+def test_to_chroma_records_rejects_mixed_widths() -> None:
+    """Reject a batch whose vectors do not share one width."""
+    chunks = _chunks()[:2]
+    with pytest.raises(ValueError, match="width"):
+        to_chroma_records(chunks, [[1.0, 0.0], [1.0, 0.0, 0.0]])
 
 
 def test_persistent_client_reloads_records_from_disk(tmp_path: Path) -> None:

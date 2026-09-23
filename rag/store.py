@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Protocol, Sequence
 
+from config import TOP_K
 from rag.schema import EmbeddedChunk, PolicyChunk, RetrievedChunk
 
 
@@ -19,7 +20,10 @@ class PolicyStore(Protocol):
         chunks: Sequence[PolicyChunk],
         embeddings: Sequence[Sequence[float]],
     ) -> list[str]:
-        """Store chunk text, embeddings, and metadata, keyed by chunk id."""
+        """Store chunk text, embeddings, and metadata, keyed by chunk id.
+
+        Ids already stored and absent from this batch are deleted.
+        """
         ...
 
     def count(self) -> int:
@@ -29,7 +33,7 @@ class PolicyStore(Protocol):
     def query_similar(
         self,
         embedding: Sequence[float],
-        n_results: int = 3,
+        n_results: int = TOP_K,
     ) -> list[RetrievedChunk]:
         """Return the chunks nearest to the query embedding."""
         ...

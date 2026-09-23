@@ -6,7 +6,7 @@ from types import SimpleNamespace
 import pytest
 
 from adapter.chroma_store import ChromaPolicyStore
-from adapter.ollama_embeddings import OllamaEmbeddingAdapter
+from adapter.ollama_embeddings import DOCUMENT_PREFIX, QUERY_PREFIX, OllamaEmbeddingAdapter
 from config import POLICY_PATH
 from rag.chunking import chunk_policy_file
 from rag.ingest import ingest_policy
@@ -60,8 +60,19 @@ def test_embedder_returns_one_complete_vector_per_chunk() -> None:
     vectors = embedder.embed_texts([chunk.text for chunk in chunks])
 
     assert len(vectors) == 6
-    assert client.calls[0] == [chunk.text for chunk in chunks]
+    assert client.calls[0] == [f"{DOCUMENT_PREFIX}{chunk.text}" for chunk in chunks]
     assert all(len(vector) == EMBEDDING_DIM for vector in vectors)
+
+
+def test_query_embedding_uses_the_search_prefix() -> None:
+    """Prefix questions for nomic without changing how documents are prefixed."""
+    client = FakeOllama()
+    embedder = OllamaEmbeddingAdapter(model="nomic-embed-text", client=client)
+
+    vector = embedder.embed_query("How much can I spend on food each day?")
+
+    assert client.calls == [[f"{QUERY_PREFIX}How much can I spend on food each day?"]]
+    assert len(vector) == EMBEDDING_DIM
 
 
 def test_embedder_rejects_empty_vectors() -> None:

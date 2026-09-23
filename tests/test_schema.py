@@ -54,6 +54,20 @@ def test_ask_response_matches_assignment_shape() -> None:
     assert response.retrieved_chunks == [RetrievedChunkRef(section="1. Meals", distance=0.08)]
 
 
+def test_citation_must_name_a_retrieved_section() -> None:
+    """Reject a citation for a section that retrieval did not return."""
+    with pytest.raises(ValidationError, match="retrieved chunks"):
+        AskResponse(
+            answer="Employees may claim up to $65 per day for meals.",
+            citation=Citation(
+                document="Employee Expense Policy",
+                version="2.0",
+                section="1. Meals",
+            ),
+            retrieved_chunks=[RetrievedChunkRef(section="2. Hotels", distance=0.2)],
+        )
+
+
 def test_unsupported_answer_has_no_citation() -> None:
     """Allow a refusal answer to omit the citation."""
     response = AskResponse(

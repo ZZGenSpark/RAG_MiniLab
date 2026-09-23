@@ -3,6 +3,8 @@
 import pytest
 
 from adapter.chroma_store import ChromaPolicyStore
+from adapter.ollama_chat import OllamaChatAdapter
+from adapter.ollama_embeddings import OllamaEmbeddingAdapter
 from config import EVAL_OUTPUT_PATH, POLICY_PATH
 from rag.ask import ask
 from rag.chunking import chunk_policy_file
@@ -14,6 +16,7 @@ from rag.eval import (
 )
 from rag.ingest import ingest_policy
 from rag.schema import REFUSAL_ANSWER, AskResponse
+from tests.support import ollama_connection_error
 
 
 def _assert_response_shape(response: AskResponse) -> None:
@@ -82,23 +85,26 @@ def test_saved_output_covers_all_six_required_questions() -> None:
 
 @pytest.fixture(scope="module")
 def live_store(tmp_path_factory: pytest.TempPathFactory) -> ChromaPolicyStore:
-    """Ingest the policy into a temporary store, or skip if Ollama is down."""
+    """Ingest the policy into a temporary store, or skip if Ollama cannot be reached."""
     chroma_path = tmp_path_factory.mktemp("required-chroma")
+    store = ChromaPolicyStore(chroma_path)
     try:
-        ingest_policy(POLICY_PATH, chroma_path=chroma_path)
+        ingest_policy(POLICY_PATH, store=store, embedder=OllamaEmbeddingAdapter())
     except Exception as exc:
-        pytest.skip(f"live Ollama ingest unavailable: {exc}")
-    return ChromaPolicyStore(chroma_path)
+        if ollama_connection_error(exc):
+            pytest.skip(f"live Ollama ingest unavailable: {exc}")
+        raise
+    return store
 
 
 def test_live_required_questions_meet_acceptance(live_store: ChromaPolicyStore) -> None:
     """Confirm a live run meets the retrieval, citation, and refusal thresholds."""
-    results = []
-    for case in REQUIRED_CASES:
-        try:
-            results.append((case, ask(case.question, store=live_store)))
-        except Exception as exc:
-            pytest.skip(f"live ask unavailable: {exc}")
+    embedder = OllamaEmbeddingAdapter()
+    generator = OllamaChatAdapter()
+    results = [
+        (case, ask(case.question, store=live_store, embedder=embedder, generator=generator))
+        for case in REQUIRED_CASES
+    ]
 
     scored = _score_required_run(results)
     assert scored["retrieve_hits"] >= 5

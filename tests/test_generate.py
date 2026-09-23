@@ -4,6 +4,7 @@ from types import SimpleNamespace
 
 from adapter.chroma_store import ChromaPolicyStore
 from adapter.ollama_chat import OllamaChatAdapter
+from config import CHAT_TEMPERATURE
 from rag.ask import ask
 from rag.generate import REFUSAL_ANSWER, generate_answer
 from rag.schema import PolicyChunk, RetrievedChunk
@@ -168,6 +169,37 @@ def test_gym_membership_is_an_unsupported_question_example() -> None:
     assert len(chat.prompts) == 3
 
 
+def test_unparseable_model_text_is_not_cited() -> None:
+    """Refuse when the model returns text that is not the expected JSON."""
+    chat = FakeGenerator("Employees may claim up to $65 per day for meals.")
+    answer, citation = generate_answer(
+        "How much can I spend on food each day?",
+        [MEALS],
+        generator=chat,
+    )
+    assert answer == REFUSAL_ANSWER
+    assert citation is None
+
+
+def test_answer_that_introduces_an_amount_is_not_cited() -> None:
+    """Skip a chunk whose answer uses an amount missing from the excerpt and question."""
+    chat = FakeGenerator(
+        '{"answerable": true, "answer": "Employees may claim up to $80 per day for meals."}',
+        '{"answerable": true, "answer": "A manager must approve rates above $225 per night."}',
+    )
+
+    answer, citation = generate_answer(
+        "How much can I spend on food each day?",
+        [MEALS, HOTELS],
+        generator=chat,
+    )
+
+    assert citation is not None
+    assert citation.section == "2. Hotels"
+    assert "$225" in answer
+    assert len(chat.prompts) == 2
+
+
 def test_empty_retrieval_refuses_without_calling_the_model() -> None:
     """Refuse immediately when retrieval returns no chunks."""
 
@@ -225,4 +257,4 @@ def test_ollama_chat_adapter_returns_message_text() -> None:
     assert text == '{"answerable": true, "answer": "$65"}'
     assert client.messages == [{"role": "user", "content": "Question: meals"}]
     assert client.kwargs["think"] is False
-    assert client.kwargs["options"] == {"temperature": 0}
+    assert client.kwargs["options"] == {"temperature": CHAT_TEMPERATURE}

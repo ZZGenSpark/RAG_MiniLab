@@ -8,10 +8,10 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from rag.schema import CHUNK_ID_PREFIX, PolicyChunk
+from rag.schema import CHUNK_ID_PREFIX, VERSION_PATTERN, PolicyChunk
 
 TITLE_RE = re.compile(
-    r"^#\s+(?P<document>.+?)\s+[—–-]\s+Version\s+(?P<version>\d+(?:\.\d+)?)\s*$",
+    rf"^#\s+(?P<document>.+?)\s+[—–-]\s+Version\s+(?P<version>{VERSION_PATTERN})\s*$",
     re.MULTILINE,
 )
 SECTION_HEADING_RE = re.compile(

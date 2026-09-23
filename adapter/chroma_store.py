@@ -8,7 +8,7 @@ from typing import Sequence
 import chromadb
 from chromadb.api.models.Collection import Collection
 
-from config import CHROMA_PATH
+from config import CHROMA_PATH, TOP_K
 from rag.schema import (
     COLLECTION_METADATA,
     COLLECTION_NAME,
@@ -16,6 +16,7 @@ from rag.schema import (
     EmbeddedChunk,
     PolicyChunk,
     RetrievedChunk,
+    require_uniform_embedding_width,
     to_chroma_records,
 )
 
@@ -33,26 +34,44 @@ class ChromaPolicyStore:
             metadata=COLLECTION_METADATA,
             embedding_function=None,
         )
+        if self.distance_space != DISTANCE_SPACE:
+            raise ValueError(
+                f"collection {COLLECTION_NAME} uses {self.distance_space} distance; "
+                f"expected {DISTANCE_SPACE}"
+            )
 
     @property
     def distance_space(self) -> str:
-        """Return the collection distance metric, defaulting to cosine."""
+        """Return the collection distance metric."""
         metadata = self.collection.metadata or {}
         if metadata.get("hnsw:space"):
             return str(metadata["hnsw:space"])
 
         configuration = self.collection.configuration_json or {}
         hnsw = configuration.get("hnsw") or {}
-        return str(hnsw.get("space") or DISTANCE_SPACE)
+        space = hnsw.get("space")
+        if not space:
+            raise ValueError(f"collection {COLLECTION_NAME} has no hnsw distance space")
+        return str(space)
 
     def upsert_chunks(
         self,
         chunks: Sequence[PolicyChunk],
         embeddings: Sequence[Sequence[float]],
     ) -> list[str]:
-        """Store chunk text, embeddings, and metadata, keyed by chunk id."""
+        """Store chunk text, embeddings, and metadata, and drop ids not in this batch."""
         records = to_chroma_records(chunks, embeddings)
+        width = require_uniform_embedding_width(records.embeddings)
+        stored_width = self._stored_embedding_width()
+        if stored_width is not None and width is not None and stored_width != width:
+            raise ValueError(
+                f"embedding width {width} does not match stored width {stored_width}"
+            )
         self.collection.upsert(**records.as_upsert())
+        existing_ids = list(self.collection.get()["ids"])
+        stale_ids = [chunk_id for chunk_id in existing_ids if chunk_id not in set(records.ids)]
+        if stale_ids:
+            self.collection.delete(ids=stale_ids)
         return records.ids
 
     def count(self) -> int:
@@ -62,16 +81,28 @@ class ChromaPolicyStore:
     def query_similar(
         self,
         embedding: Sequence[float],
-        n_results: int = 3,
+        n_results: int = TOP_K,
     ) -> list[RetrievedChunk]:
         """Return the chunks nearest to the query embedding."""
+        if n_results < 1:
+            raise ValueError("n_results must be at least 1")
+
         available = self.count()
         if available == 0:
             return []
 
+        query = [float(value) for value in embedding]
+        if not query:
+            raise ValueError("query embedding must be a complete vector")
+        stored_width = self._stored_embedding_width()
+        if stored_width is not None and len(query) != stored_width:
+            raise ValueError(
+                f"query embedding width {len(query)} does not match stored width {stored_width}"
+            )
+
         result = self.collection.query(
-            query_embeddings=[list(embedding)],
-            n_results=min(n_results, 3, available),
+            query_embeddings=[query],
+            n_results=min(n_results, available),
             include=["documents", "metadatas", "distances"],
         )
         ids = _first_query_row(result["ids"])
@@ -122,6 +153,16 @@ class ChromaPolicyStore:
             )
         records.sort(key=lambda record: int(record.section))
         return records
+
+    def _stored_embedding_width(self) -> int | None:
+        """Return the width of one stored vector, or None when the collection is empty."""
+        if self.count() == 0:
+            return None
+        result = self.collection.get(limit=1, include=["embeddings"])
+        embeddings = result.get("embeddings")
+        if embeddings is None or len(embeddings) == 0 or embeddings[0] is None:
+            return None
+        return len(list(embeddings[0]))
 
 
 def _first_query_row(value) -> list:

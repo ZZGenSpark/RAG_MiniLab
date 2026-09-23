@@ -9,10 +9,10 @@ from typing import Sequence
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from config import COLLECTION_NAME, DISTANCE_SPACE
+from config import CHUNK_ID_PREFIX, COLLECTION_NAME, DISTANCE_SPACE, TOP_K
 
 COLLECTION_METADATA = {"hnsw:space": DISTANCE_SPACE}
-CHUNK_ID_PREFIX = "expense-policy"
+VERSION_PATTERN = r"\d+\.\d+"
 
 
 class ChunkMetadata(BaseModel):
@@ -21,7 +21,7 @@ class ChunkMetadata(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     document: str = Field(min_length=1)
-    version: str = Field(pattern=r"^\d+\.\d+$")
+    version: str = Field(pattern=rf"^{VERSION_PATTERN}$")
     section: str = Field(pattern=r"^\d+$")
     section_title: str = Field(min_length=1)
 
@@ -119,7 +119,7 @@ class Citation(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     document: str = Field(min_length=1)
-    version: str = Field(pattern=r"^\d+\.\d+$")
+    version: str = Field(pattern=rf"^{VERSION_PATTERN}$")
     section: str = Field(min_length=1, pattern=r"^\d+\.\s+.+$")
 
 
@@ -159,7 +159,7 @@ class AskResponse(BaseModel):
 
     answer: str = Field(min_length=1)
     citation: Citation | None
-    retrieved_chunks: list[RetrievedChunkRef] = Field(max_length=3)
+    retrieved_chunks: list[RetrievedChunkRef] = Field(max_length=TOP_K)
 
     @field_validator("retrieved_chunks")
     @classmethod
@@ -170,6 +170,26 @@ class AskResponse(BaseModel):
             raise ValueError("retrieved_chunks must be sorted by cosine distance ascending")
         return chunks
 
+    @model_validator(mode="after")
+    def citation_is_one_of_the_retrieved_chunks(self) -> AskResponse:
+        """Require a citation to name a section that retrieval returned."""
+        if self.citation is None:
+            return self
+        retrieved = {chunk.section for chunk in self.retrieved_chunks}
+        if self.citation.section not in retrieved:
+            raise ValueError("citation section must be one of the retrieved chunks")
+        return self
+
+
+def require_uniform_embedding_width(embeddings: Sequence[Sequence[float]]) -> int | None:
+    """Return the shared vector width, or None when there are no embeddings."""
+    if not embeddings:
+        return None
+    width = len(embeddings[0])
+    if width < 1 or any(len(vector) != width for vector in embeddings):
+        raise ValueError("embeddings must share one non-zero width")
+    return width
+
 
 def to_chroma_records(
     chunks: Sequence[PolicyChunk],
@@ -178,6 +198,7 @@ def to_chroma_records(
     """Pair chunks with embeddings into one Chroma upsert payload."""
     if len(chunks) != len(embeddings):
         raise ValueError("each chunk must have exactly one embedding vector")
+    require_uniform_embedding_width(embeddings)
 
     embedded = [
         EmbeddedChunk.model_validate({**chunk.model_dump(), "embedding": list(embedding)})

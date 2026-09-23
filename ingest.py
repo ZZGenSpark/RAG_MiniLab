@@ -5,7 +5,9 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from config import POLICY_PATH
+from adapter.chroma_store import ChromaPolicyStore
+from adapter.ollama_embeddings import OllamaEmbeddingAdapter
+from config import CHROMA_PATH, POLICY_PATH
 from rag.ingest import ingest_policy
 
 
@@ -26,7 +28,8 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    chunk_ids = ingest_policy(args.policy, chroma_path=args.chroma_path)
+    store = ChromaPolicyStore(args.chroma_path or CHROMA_PATH)
+    chunk_ids = ingest_policy(args.policy, store=store, embedder=OllamaEmbeddingAdapter())
     print(f"Ingested {len(chunk_ids)} policy chunks:")
     for chunk_id in chunk_ids:
         print(f"  {chunk_id}")

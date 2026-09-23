@@ -122,6 +122,17 @@ def test_chunks_do_not_cut_sentences_in_half() -> None:
         assert chunk.text[0].isupper()
 
 
+def test_version_must_include_a_minor_number() -> None:
+    """Reject a heading version that is not major.minor."""
+    markdown = (
+        "# Employee Expense Policy — Version 2\n\n"
+        "## 1. Meals\n"
+        "Employees may claim up to $65 per day.\n"
+    )
+    with pytest.raises(ValueError, match="Version"):
+        chunk_policy(markdown)
+
+
 def test_missing_title_is_rejected() -> None:
     """Reject markdown that has no document title and version."""
     with pytest.raises(ValueError, match="missing"):

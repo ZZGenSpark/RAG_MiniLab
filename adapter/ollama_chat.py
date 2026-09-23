@@ -6,7 +6,7 @@ from typing import Protocol
 
 import ollama
 
-from config import CHAT_MODEL, OLLAMA_HOST
+from config import CHAT_MODEL, CHAT_TEMPERATURE, OLLAMA_HOST
 from rag.schema import GroundedModelOutput
 
 
@@ -36,7 +36,7 @@ class OllamaChatAdapter:
             messages=[{"role": "user", "content": prompt}],
             format=GroundedModelOutput.model_json_schema(),
             think=False,
-            options={"temperature": 0},
+            options={"temperature": CHAT_TEMPERATURE},
         )
         content = getattr(response, "message", None)
         text = getattr(content, "content", None) if content is not None else None

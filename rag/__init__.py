@@ -3,18 +3,16 @@
 Re-exports ingest, retrieval, generation, and the shared schema types.
 """
 
-from adapter.chroma_store import ChromaPolicyStore
-from adapter.ollama_chat import OllamaChatAdapter
-from adapter.ollama_embeddings import OllamaEmbeddingAdapter
 from rag.ask import ask
 from rag.chunking import chunk_policy, chunk_policy_file
 from rag.embeddings import Embedder
-from rag.generate import REFUSAL_ANSWER, generate_answer
+from rag.generate import generate_answer
 from rag.ingest import ingest_policy
 from rag.retrieve import retrieve
 from rag.schema import (
     COLLECTION_NAME,
     DISTANCE_SPACE,
+    REFUSAL_ANSWER,
     AskResponse,
     Citation,
     EmbeddedChunk,
@@ -29,11 +27,8 @@ __all__ = [
     "DISTANCE_SPACE",
     "AskResponse",
     "Citation",
-    "ChromaPolicyStore",
     "Embedder",
     "EmbeddedChunk",
-    "OllamaChatAdapter",
-    "OllamaEmbeddingAdapter",
     "PolicyChunk",
     "PolicyStore",
     "REFUSAL_ANSWER",

@@ -5,6 +5,9 @@ from __future__ import annotations
 import argparse
 
 from adapter.chroma_store import ChromaPolicyStore
+from adapter.ollama_chat import OllamaChatAdapter
+from adapter.ollama_embeddings import OllamaEmbeddingAdapter
+from config import CHROMA_PATH
 from rag.ask import ask
 
 
@@ -19,8 +22,13 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    store = ChromaPolicyStore(args.chroma_path) if args.chroma_path else None
-    response = ask(args.question, store=store)
+    store = ChromaPolicyStore(args.chroma_path or CHROMA_PATH)
+    response = ask(
+        args.question,
+        store=store,
+        embedder=OllamaEmbeddingAdapter(),
+        generator=OllamaChatAdapter(),
+    )
     print(response.model_dump_json(indent=2))
 
 
