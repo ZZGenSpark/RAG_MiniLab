@@ -31,11 +31,14 @@ Prints JSON: `answer`, `citation` (or `null` when the policy does not answer), a
 ## Tests and saved output
 
 ```bash
+ruff check .
+ruff format --check .
+mypy
 pytest
 python -m rag.eval
 ```
 
-`pytest` covers chunking, Chroma storage, retrieval, grounded generation, and the six required questions. `python -m rag.eval` writes `outputs/required_questions.json`.
+GitHub Actions runs ruff, mypy, and pytest on Python 3.12. That job does not call Ollama or TypeSafe. `pytest` covers chunking, Chroma storage, retrieval, grounded generation, and the six required questions. `python -m rag.eval` writes `outputs/required_questions.json`.
 
 ## Chroma persistence
 

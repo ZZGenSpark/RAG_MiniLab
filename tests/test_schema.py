@@ -111,12 +111,14 @@ def test_policy_chunk_citation_label_drops_the_stored_text() -> None:
 def test_chunk_metadata_rejects_unknown_fields() -> None:
     """Reject citation metadata that carries fields outside the stored shape."""
     with pytest.raises(ValidationError):
-        ChunkMetadata(
-            document="Employee Expense Policy",
-            version="2.0",
-            section="1",
-            section_title="Meals",
-            text="Employees may claim up to $65 per day.",
+        ChunkMetadata.model_validate(
+            {
+                "document": "Employee Expense Policy",
+                "version": "2.0",
+                "section": "1",
+                "section_title": "Meals",
+                "text": "Employees may claim up to $65 per day.",
+            }
         )
 
 

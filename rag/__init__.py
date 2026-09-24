@@ -3,6 +3,7 @@
 Re-exports ingest, retrieval, generation, and the shared schema types.
 """
 
+from config import COLLECTION_NAME
 from rag.ask import ask
 from rag.chunking import chunk_policy, chunk_policy_file
 from rag.embeddings import Embedder
@@ -10,7 +11,6 @@ from rag.generate import generate_answer
 from rag.ingest import ingest_policy
 from rag.retrieve import retrieve
 from rag.schema import (
-    COLLECTION_NAME,
     DISTANCE_SPACE,
     REFUSAL_ANSWER,
     AskResponse,

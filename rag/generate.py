@@ -54,11 +54,7 @@ def generate_answer(
         raw = generator.complete(build_prompt(question, chunk))
         parsed = _parse_model_output(raw)
         answer = parsed.answer.strip()
-        if (
-            parsed.answerable
-            and answer
-            and _answer_claims_are_supported(answer, chunk.text, question)
-        ):
+        if parsed.answerable and answer and _answer_claims_are_supported(answer, chunk.text, question):
             return answer, Citation(
                 document=chunk.document,
                 version=chunk.version,

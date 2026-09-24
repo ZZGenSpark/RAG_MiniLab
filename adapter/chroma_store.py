@@ -2,16 +2,15 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Sequence
 
 import chromadb
 from chromadb.api.models.Collection import Collection
 
-from config import CHROMA_PATH, TOP_K
+from config import CHROMA_PATH, COLLECTION_NAME, TOP_K
 from rag.schema import (
     COLLECTION_METADATA,
-    COLLECTION_NAME,
     DISTANCE_SPACE,
     EmbeddedChunk,
     PolicyChunk,
@@ -36,8 +35,7 @@ class ChromaPolicyStore:
         )
         if self.distance_space != DISTANCE_SPACE:
             raise ValueError(
-                f"collection {COLLECTION_NAME} uses {self.distance_space} distance; "
-                f"expected {DISTANCE_SPACE}"
+                f"collection {COLLECTION_NAME} uses {self.distance_space} distance; expected {DISTANCE_SPACE}"
             )
 
     @property
@@ -64,9 +62,7 @@ class ChromaPolicyStore:
         width = require_uniform_embedding_width(records.embeddings)
         stored_width = self._stored_embedding_width()
         if stored_width is not None and width is not None and stored_width != width:
-            raise ValueError(
-                f"embedding width {width} does not match stored width {stored_width}"
-            )
+            raise ValueError(f"embedding width {width} does not match stored width {stored_width}")
         self.collection.upsert(**records.as_upsert())
         existing_ids = list(self.collection.get()["ids"])
         stale_ids = [chunk_id for chunk_id in existing_ids if chunk_id not in set(records.ids)]
@@ -96,12 +92,11 @@ class ChromaPolicyStore:
             raise ValueError("query embedding must be a complete vector")
         stored_width = self._stored_embedding_width()
         if stored_width is not None and len(query) != stored_width:
-            raise ValueError(
-                f"query embedding width {len(query)} does not match stored width {stored_width}"
-            )
+            raise ValueError(f"query embedding width {len(query)} does not match stored width {stored_width}")
 
+        query_vectors: list[Sequence[float]] = [query]
         result = self.collection.query(
-            query_embeddings=[query],
+            query_embeddings=query_vectors,
             n_results=min(n_results, available),
             include=["documents", "metadatas", "distances"],
         )
@@ -111,9 +106,7 @@ class ChromaPolicyStore:
         distances = _first_query_row(result["distances"])
 
         hits: list[RetrievedChunk] = []
-        for chunk_id, text, metadata, distance in zip(
-            ids, documents, metadatas, distances, strict=True
-        ):
+        for chunk_id, text, metadata, distance in zip(ids, documents, metadatas, distances, strict=True):
             if text is None or metadata is None or distance is None:
                 raise ValueError(f"retrieved record {chunk_id} is missing text, metadata, or distance")
             hits.append(
@@ -138,9 +131,7 @@ class ChromaPolicyStore:
         metadatas = list(result["metadatas"] or [])
         embeddings = list(result["embeddings"] if result["embeddings"] is not None else [])
 
-        for chunk_id, text, metadata, embedding in zip(
-            ids, documents, metadatas, embeddings, strict=True
-        ):
+        for chunk_id, text, metadata, embedding in zip(ids, documents, metadatas, embeddings, strict=True):
             if text is None or metadata is None or embedding is None:
                 raise ValueError(f"stored record {chunk_id} is missing text, metadata, or embedding")
             records.append(

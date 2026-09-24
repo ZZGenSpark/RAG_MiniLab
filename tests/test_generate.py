@@ -1,5 +1,6 @@
 """Test grounded answers, fallbacks, and refusals with fake models."""
 
+from collections.abc import Sequence
 from types import SimpleNamespace
 
 import pytest
@@ -7,8 +8,8 @@ import pytest
 from adapter.chroma_store import ChromaPolicyStore
 from adapter.ollama_chat import OllamaChatAdapter
 from config import CHAT_TEMPERATURE
-from rag.ask import ask
 from prompt.grounded_excerpt import INSTRUCTION, build_grounded_excerpt_prompt
+from rag.ask import ask
 from rag.generate import REFUSAL_ANSWER, build_prompt, generate_answer
 from rag.schema import PolicyChunk, RetrievedChunk
 
@@ -68,7 +69,7 @@ class FakeGenerator:
 
 
 class FakeEmbedder:
-    def embed_texts(self, texts: list[str]) -> list[list[float]]:
+    def embed_texts(self, texts: Sequence[str]) -> list[list[float]]:
         """Return a fixed unit vector for each input text."""
         return [[1.0, 0.0, 0.0] for _ in texts]
 
@@ -104,9 +105,7 @@ def _store_with_meals(tmp_path) -> ChromaPolicyStore:
 
 def test_closest_chunk_answers_in_a_single_call() -> None:
     """Cite the closest chunk when it alone answers the question."""
-    chat = FakeGenerator(
-        '{"answerable": true, "answer": "Employees may claim up to $65 per day for meals."}'
-    )
+    chat = FakeGenerator('{"answerable": true, "answer": "Employees may claim up to $65 per day for meals."}')
 
     answer, citation = generate_answer(
         "How much can I spend on food each day?",
@@ -201,9 +200,7 @@ def test_answerable_flag_with_an_empty_answer_is_not_cited() -> None:
 
 def test_number_from_the_question_is_allowed_in_the_answer() -> None:
     """Allow an amount that appears in the question even when the excerpt uses another amount."""
-    chat = FakeGenerator(
-        '{"answerable": true, "answer": "A manager must approve a hotel that costs $250."}'
-    )
+    chat = FakeGenerator('{"answerable": true, "answer": "A manager must approve a hotel that costs $250."}')
     answer, citation = generate_answer(
         "My hotel costs $250. What do I need?",
         [HOTELS],
@@ -292,9 +289,7 @@ def test_empty_retrieval_refuses_without_calling_the_model() -> None:
 def test_ask_builds_structured_response_from_retrieval_not_the_model(tmp_path) -> None:
     """Build the cited response from retrieved chunks, not from the model JSON."""
     store = _store_with_meals(tmp_path)
-    chat = FakeGenerator(
-        '{"answerable": true, "answer": "Employees may claim up to $65 per day for meals."}'
-    )
+    chat = FakeGenerator('{"answerable": true, "answer": "Employees may claim up to $65 per day for meals."}')
 
     response = ask(
         "How much can I spend on food each day?",
@@ -306,9 +301,7 @@ def test_ask_builds_structured_response_from_retrieval_not_the_model(tmp_path) -
     assert response.citation is not None
     assert response.citation.section == "1. Meals"
     assert len(response.retrieved_chunks) <= 3
-    assert response.retrieved_chunks == sorted(
-        response.retrieved_chunks, key=lambda chunk: chunk.distance
-    )
+    assert response.retrieved_chunks == sorted(response.retrieved_chunks, key=lambda chunk: chunk.distance)
     assert all(isinstance(chunk.distance, float) for chunk in response.retrieved_chunks)
     assert "1. Meals" in {chunk.section for chunk in response.retrieved_chunks}
 

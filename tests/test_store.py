@@ -5,9 +5,9 @@ from pathlib import Path
 import pytest
 
 from adapter.chroma_store import ChromaPolicyStore
+from config import COLLECTION_NAME
 from rag.chunking import chunk_policy_file
 from rag.schema import (
-    COLLECTION_NAME,
     DISTANCE_SPACE,
     REQUIRED_METADATA_KEYS,
     to_chroma_records,
@@ -24,10 +24,7 @@ def _chunks():
 
 def _embeddings(count: int, dim: int = EMBEDDING_DIM):
     """Build one distinct fixed-width vector per chunk."""
-    return [
-        [float(index + 1 if position == index else 0) for position in range(dim)]
-        for index in range(count)
-    ]
+    return [[float(index + 1 if position == index else 0) for position in range(dim)] for index in range(count)]
 
 
 def test_to_chroma_records_maps_assignment_fields() -> None:

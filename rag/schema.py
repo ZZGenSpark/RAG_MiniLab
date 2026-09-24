@@ -5,11 +5,11 @@ Defines the Chroma record shape and checks ids, metadata, and ranking.
 
 from __future__ import annotations
 
-from typing import Sequence
+from collections.abc import Sequence
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from config import COLLECTION_NAME, DISTANCE_SPACE, TOP_K
+from config import DISTANCE_SPACE, TOP_K
 from rag.slug import slugify
 
 COLLECTION_METADATA = {"hnsw:space": DISTANCE_SPACE}

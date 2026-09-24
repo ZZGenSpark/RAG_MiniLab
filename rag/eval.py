@@ -20,7 +20,7 @@ from rag.schema import REFUSAL_ANSWER, AskResponse
 from rag.store import PolicyStore
 
 
-def answer_matches(case: "RequiredCase", answer: str) -> bool:
+def answer_matches(case: RequiredCase, answer: str) -> bool:
     """Return whether every expected marker appears in the answer."""
     text = answer.lower()
     return all(marker.lower() in text for marker in case.answer_markers)

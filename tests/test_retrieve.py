@@ -1,5 +1,6 @@
 """Check cosine retrieval ranking and the three-chunk cap."""
 
+from collections.abc import Sequence
 from pathlib import Path
 
 import pytest
@@ -16,7 +17,7 @@ class FakeEmbedder:
         self.query_vector = query_vector
         self.calls: list[list[str]] = []
 
-    def embed_texts(self, texts: list[str]) -> list[list[float]]:
+    def embed_texts(self, texts: Sequence[str]) -> list[list[float]]:
         """Record the inputs and return the fixed query vector for each."""
         self.calls.append(list(texts))
         return [list(self.query_vector) for _ in texts]
@@ -69,7 +70,7 @@ def test_retrieve_rejects_a_blank_question(ranked_store: ChromaPolicyStore) -> N
     """Reject a question that has no text before any embedding call."""
 
     class ExplodingEmbedder:
-        def embed_texts(self, texts: list[str]) -> list[list[float]]:
+        def embed_texts(self, texts: Sequence[str]) -> list[list[float]]:
             """Fail if a blank question is embedded."""
             raise AssertionError("blank questions are not embedded")
 

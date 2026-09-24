@@ -14,8 +14,7 @@ EXPECTED_CHUNKS = [
         "section": "1",
         "section_title": "Meals",
         "text": (
-            "Employees may claim up to $65 per day for meals while traveling overnight.\n"
-            "Alcohol is not reimbursable."
+            "Employees may claim up to $65 per day for meals while traveling overnight.\nAlcohol is not reimbursable."
         ),
     },
     {
@@ -24,10 +23,7 @@ EXPECTED_CHUNKS = [
         "version": "2.0",
         "section": "2",
         "section_title": "Hotels",
-        "text": (
-            "Hotels are reimbursable up to $225 per night.\n"
-            "A manager must approve higher rates before booking."
-        ),
+        "text": ("Hotels are reimbursable up to $225 per night.\nA manager must approve higher rates before booking."),
     },
     {
         "chunk_id": "employee-expense-policy:v2.0:section-3",
@@ -112,10 +108,7 @@ def test_chunks_do_not_cut_sentences_in_half() -> None:
     combined = "\n".join(chunk.text for chunk in chunks)
     for sentence in sentences:
         assert sentence in combined
-        assert not any(
-            sentence[: len(sentence) // 2] in chunk.text and sentence not in chunk.text
-            for chunk in chunks
-        )
+        assert not any(sentence[: len(sentence) // 2] in chunk.text and sentence not in chunk.text for chunk in chunks)
 
     for chunk in chunks:
         assert chunk.text[-1] in ".!?"
@@ -124,11 +117,7 @@ def test_chunks_do_not_cut_sentences_in_half() -> None:
 
 def test_version_must_include_a_minor_number() -> None:
     """Reject a heading version that is not major.minor."""
-    markdown = (
-        "# Employee Expense Policy — Version 2\n\n"
-        "## 1. Meals\n"
-        "Employees may claim up to $65 per day.\n"
-    )
+    markdown = "# Employee Expense Policy — Version 2\n\n## 1. Meals\nEmployees may claim up to $65 per day.\n"
     with pytest.raises(ValueError, match="Version"):
         chunk_policy(markdown)
 
@@ -141,10 +130,7 @@ def test_missing_title_is_rejected() -> None:
 
 def test_chunk_id_encodes_the_document_slug_version_and_section() -> None:
     """Keep the chunk id tied to the document slug, version, and section number."""
-    assert (
-        chunk_id_for("Employee Expense Policy", "2.0", "5")
-        == "employee-expense-policy:v2.0:section-5"
-    )
+    assert chunk_id_for("Employee Expense Policy", "2.0", "5") == "employee-expense-policy:v2.0:section-5"
 
 
 def test_chunk_id_keeps_different_documents_from_colliding() -> None:
@@ -158,33 +144,21 @@ def test_chunk_id_keeps_different_documents_from_colliding() -> None:
 
 def test_section_that_ends_mid_sentence_is_rejected() -> None:
     """Reject a section body that does not finish a sentence."""
-    markdown = (
-        "# Employee Expense Policy — Version 2.0\n\n"
-        "## 1. Meals\n"
-        "Employees may claim up to $65 per day"
-    )
+    markdown = "# Employee Expense Policy — Version 2.0\n\n## 1. Meals\nEmployees may claim up to $65 per day"
     with pytest.raises(ValueError, match="mid-sentence"):
         chunk_policy(markdown)
 
 
 def test_section_that_starts_mid_sentence_is_rejected() -> None:
     """Reject a section body that begins in the middle of a sentence."""
-    markdown = (
-        "# Employee Expense Policy — Version 2.0\n\n"
-        "## 1. Meals\n"
-        "up to $65 per day."
-    )
+    markdown = "# Employee Expense Policy — Version 2.0\n\n## 1. Meals\nup to $65 per day."
     with pytest.raises(ValueError, match="mid-sentence"):
         chunk_policy(markdown)
 
 
 def test_hyphenated_version_heading_is_accepted() -> None:
     """Accept a title that separates the version with a hyphen."""
-    markdown = (
-        "# Employee Expense Policy - Version 2.0\n\n"
-        "## 1. Meals\n"
-        "Employees may claim up to $65 per day.\n"
-    )
+    markdown = "# Employee Expense Policy - Version 2.0\n\n## 1. Meals\nEmployees may claim up to $65 per day.\n"
     chunks = chunk_policy(markdown)
     assert chunks[0].version == "2.0"
     assert chunks[0].document == "Employee Expense Policy"

@@ -1,5 +1,6 @@
 """Check embedding completeness and the six-chunk ingest path."""
 
+from collections.abc import Sequence
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -20,7 +21,7 @@ class FakeOllama:
         self.dim = dim
         self.calls: list[list[str]] = []
 
-    def embed(self, model: str, input: str | list[str]):
+    def embed(self, model: str, input: str | Sequence[str]):
         """Record the inputs and return one fixed-width vector per text."""
         texts = input if isinstance(input, list) else [input]
         self.calls.append(list(texts))
@@ -38,7 +39,7 @@ class FakeEmbedder:
         self.dim = dim
         self.calls: list[list[str]] = []
 
-    def embed_texts(self, texts: list[str]) -> list[list[float]]:
+    def embed_texts(self, texts: Sequence[str]) -> list[list[float]]:
         """Record the inputs and return one fixed-width vector per text."""
         self.calls.append(list(texts))
         return [
@@ -79,7 +80,7 @@ def test_embedder_returns_nothing_for_an_empty_batch() -> None:
     """Skip the embedding client when there is no text to embed."""
 
     class ExplodingClient:
-        def embed(self, model: str, input: str | list[str]):
+        def embed(self, model: str, input: str | Sequence[str]):
             """Fail if an empty batch reaches the client."""
             raise AssertionError("empty batches are not sent to the embedding client")
 
@@ -90,7 +91,7 @@ def test_embedder_rejects_a_short_vector_batch() -> None:
     """Reject a client that returns fewer vectors than input texts."""
 
     class ShortClient:
-        def embed(self, model: str, input: str | list[str]):
+        def embed(self, model: str, input: str | Sequence[str]):
             """Return a single vector regardless of how many texts were sent."""
             return SimpleNamespace(embeddings=[[0.1, 0.2]])
 
@@ -104,7 +105,7 @@ def test_embedder_rejects_empty_vectors() -> None:
     """Reject an embedding client that returns empty vectors."""
 
     class EmptyClient:
-        def embed(self, model: str, input: str | list[str]):
+        def embed(self, model: str, input: str | Sequence[str]):
             """Return an empty vector for each input text."""
             texts = input if isinstance(input, list) else [input]
             return SimpleNamespace(embeddings=[[] for _ in texts])
@@ -174,7 +175,7 @@ def test_ingest_rejects_duplicate_chunk_ids_before_embedding(tmp_path: Path) -> 
     (policies / "b.md").write_text(text, encoding="utf-8")
 
     class ExplodingEmbedder:
-        def embed_texts(self, texts: list[str]) -> list[list[float]]:
+        def embed_texts(self, texts: Sequence[str]) -> list[list[float]]:
             """Fail if colliding policies are embedded."""
             raise AssertionError("duplicate chunk ids are rejected before embedding")
 

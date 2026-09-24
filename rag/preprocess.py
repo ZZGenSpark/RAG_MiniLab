@@ -17,9 +17,7 @@ from pypdf import PdfReader
 from config import INGEST_SOURCES, POLICIES_DIR
 from rag.slug import slugify
 
-TITLE_RE = re.compile(
-    r"^(?P<title>.+?)\s+[—–-]\s+Version\s+(?P<version>\d+\.\d+)\s*$"
-)
+TITLE_RE = re.compile(r"^(?P<title>.+?)\s+[—–-]\s+Version\s+(?P<version>\d+\.\d+)\s*$")
 RULE_RE = re.compile(r"^(?P<number>\d+\.\d+)\s+(?P<rest>.+)$")
 PARENT_RE = re.compile(r"^(?P<number>\d+)\.\s+(?!\d)(?P<title>.+)$")
 RULE_BODY_RE = re.compile(r"^(?P<title>.+?)\.\s+(?P<body>.+)$", re.DOTALL)

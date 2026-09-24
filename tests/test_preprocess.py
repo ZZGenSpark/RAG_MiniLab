@@ -16,9 +16,7 @@ from rag.preprocess import (
 
 def test_docx_rule_paragraph_splits_heading_and_body() -> None:
     """Split `3.1 Requirement. Every email...` into a heading and a body."""
-    markdown = paragraphs_to_markdown(
-        ["3.1 Requirement. Every email must start with a joke."]
-    )
+    markdown = paragraphs_to_markdown(["3.1 Requirement. Every email must start with a joke."])
     assert "### 3.1 Requirement" in markdown
     assert "Every email must start with a joke." in markdown
     assert "Requirement. Every" not in markdown
@@ -120,7 +118,7 @@ def test_write_policy_names_the_file_from_the_title(tmp_path: Path) -> None:
     document = Document()
     document.add_paragraph("HR Policy — Version 2.0")
     document.add_paragraph("7.3 Weekend Abandonment. Food left in the refrigerator is discarded.")
-    document.save(source)
+    document.save(str(source))
     dest = tmp_path / "out"
     dest.mkdir()
 
@@ -138,7 +136,7 @@ def test_write_policy_requires_a_title(tmp_path: Path) -> None:
     source = tmp_path / "Doofenshmirtz Evil Inc - HR Policy v2.0.docx"
     document = Document()
     document.add_paragraph("7.3 Weekend Abandonment. Food left in the refrigerator is discarded.")
-    document.save(source)
+    document.save(str(source))
 
     with pytest.raises(ValueError, match="did not produce a policy title"):
         write_policy(source, tmp_path / "out")
