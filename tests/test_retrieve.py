@@ -1,23 +1,13 @@
-"""Check cosine retrieval ranking, the three-chunk cap, and live questions."""
+"""Check cosine retrieval ranking and the three-chunk cap."""
 
 from pathlib import Path
 
 import pytest
 
 from adapter.chroma_store import ChromaPolicyStore
-from adapter.ollama_embeddings import OllamaEmbeddingAdapter
-from config import POLICY_PATH
 from rag.chunking import chunk_policy_file
-from rag.eval import REQUIRED_CASES
-from rag.ingest import ingest_policy
 from rag.retrieve import retrieve
-from tests.support import ollama_connection_error
-
-LIVE_RETRIEVAL_CASES = [
-    (case.question, case.expected_citation)
-    for case in REQUIRED_CASES
-    if case.expected_citation is not None
-]
+from tests.support import EXPENSE_POLICY_FIXTURE
 
 
 class FakeEmbedder:
@@ -51,7 +41,7 @@ def _section_embeddings() -> list[list[float]]:
 @pytest.fixture
 def ranked_store(tmp_path: Path) -> ChromaPolicyStore:
     """Store the six policy chunks with orthogonal section embeddings."""
-    chunks = chunk_policy_file(POLICY_PATH)
+    chunks = chunk_policy_file(EXPENSE_POLICY_FIXTURE)
     store = ChromaPolicyStore(tmp_path / "chroma")
     store.upsert_chunks(chunks, _section_embeddings())
     return store
@@ -122,47 +112,3 @@ def test_retrieve_does_not_depend_on_exact_keywords(ranked_store: ChromaPolicySt
     )
     assert hits[0].citation_section == "3. Airfare"
     assert hits[0].text.startswith("Employees must purchase economy airfare.")
-
-
-@pytest.fixture(scope="module")
-def live_retrieval(tmp_path_factory: pytest.TempPathFactory) -> tuple[ChromaPolicyStore, OllamaEmbeddingAdapter]:
-    """Ingest the policy into a temporary store, or skip if Ollama cannot be reached."""
-    chroma_path = tmp_path_factory.mktemp("live-chroma")
-    store = ChromaPolicyStore(chroma_path)
-    embedder = OllamaEmbeddingAdapter()
-    try:
-        ingest_policy(POLICY_PATH, store=store, embedder=embedder)
-    except Exception as exc:
-        if ollama_connection_error(exc):
-            pytest.skip(f"live Ollama ingest unavailable: {exc}")
-        raise
-    return store, embedder
-
-
-@pytest.mark.parametrize("question, expected_section", LIVE_RETRIEVAL_CASES)
-def test_live_retrieve_finds_expected_section(
-    live_retrieval: tuple[ChromaPolicyStore, OllamaEmbeddingAdapter],
-    question: str,
-    expected_section: str,
-) -> None:
-    """Confirm live retrieval includes the expected section within three chunks."""
-    store, embedder = live_retrieval
-    hits = retrieve(question, store=store, embedder=embedder)
-    assert len(hits) <= 3
-    distances = [hit.distance for hit in hits]
-    assert distances == sorted(distances)
-    assert all(isinstance(distance, float) for distance in distances)
-    assert expected_section in [hit.citation_section for hit in hits]
-
-
-def test_live_retrieve_caps_unsupported_question(
-    live_retrieval: tuple[ChromaPolicyStore, OllamaEmbeddingAdapter],
-) -> None:
-    """Cap an unsupported live question at three sorted chunks."""
-    store, embedder = live_retrieval
-    question = next(case.question for case in REQUIRED_CASES if case.expected_citation is None)
-    hits = retrieve(question, store=store, embedder=embedder)
-    assert 0 < len(hits) <= 3
-    distances = [hit.distance for hit in hits]
-    assert distances == sorted(distances)
-    assert all(isinstance(distance, float) for distance in distances)

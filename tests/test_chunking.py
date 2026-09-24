@@ -2,13 +2,13 @@
 
 import pytest
 
-from config import POLICY_PATH
 from rag.chunking import chunk_id_for, chunk_policy, chunk_policy_file
 from rag.schema import PolicyChunk
+from tests.support import EXPENSE_POLICY_FIXTURE
 
 EXPECTED_CHUNKS = [
     {
-        "chunk_id": "expense-policy:v2.0:section-1",
+        "chunk_id": "employee-expense-policy:v2.0:section-1",
         "document": "Employee Expense Policy",
         "version": "2.0",
         "section": "1",
@@ -19,7 +19,7 @@ EXPECTED_CHUNKS = [
         ),
     },
     {
-        "chunk_id": "expense-policy:v2.0:section-2",
+        "chunk_id": "employee-expense-policy:v2.0:section-2",
         "document": "Employee Expense Policy",
         "version": "2.0",
         "section": "2",
@@ -30,7 +30,7 @@ EXPECTED_CHUNKS = [
         ),
     },
     {
-        "chunk_id": "expense-policy:v2.0:section-3",
+        "chunk_id": "employee-expense-policy:v2.0:section-3",
         "document": "Employee Expense Policy",
         "version": "2.0",
         "section": "3",
@@ -41,7 +41,7 @@ EXPECTED_CHUNKS = [
         ),
     },
     {
-        "chunk_id": "expense-policy:v2.0:section-4",
+        "chunk_id": "employee-expense-policy:v2.0:section-4",
         "document": "Employee Expense Policy",
         "version": "2.0",
         "section": "4",
@@ -52,7 +52,7 @@ EXPECTED_CHUNKS = [
         ),
     },
     {
-        "chunk_id": "expense-policy:v2.0:section-5",
+        "chunk_id": "employee-expense-policy:v2.0:section-5",
         "document": "Employee Expense Policy",
         "version": "2.0",
         "section": "5",
@@ -60,7 +60,7 @@ EXPECTED_CHUNKS = [
         "text": "Receipts are required for individual expenses of $25 or more.",
     },
     {
-        "chunk_id": "expense-policy:v2.0:section-6",
+        "chunk_id": "employee-expense-policy:v2.0:section-6",
         "document": "Employee Expense Policy",
         "version": "2.0",
         "section": "6",
@@ -72,19 +72,19 @@ EXPECTED_CHUNKS = [
 
 def test_policy_file_produces_exactly_six_chunks() -> None:
     """Confirm the policy file yields exactly six chunks."""
-    chunks = chunk_policy_file(POLICY_PATH)
+    chunks = chunk_policy_file(EXPENSE_POLICY_FIXTURE)
     assert len(chunks) == 6
 
 
 def test_chunks_have_stable_ids_and_required_metadata() -> None:
     """Confirm each chunk keeps its stable id and citation metadata."""
-    chunks = chunk_policy_file(POLICY_PATH)
+    chunks = chunk_policy_file(EXPENSE_POLICY_FIXTURE)
     assert chunks == [PolicyChunk.model_validate(row) for row in EXPECTED_CHUNKS]
 
 
 def test_chunk_text_is_the_full_original_section_body() -> None:
     """Confirm chunk text is the original section body without the heading."""
-    source = POLICY_PATH.read_text(encoding="utf-8")
+    source = EXPENSE_POLICY_FIXTURE.read_text(encoding="utf-8")
     chunks = chunk_policy(source)
 
     for chunk in chunks:
@@ -95,7 +95,7 @@ def test_chunk_text_is_the_full_original_section_body() -> None:
 
 def test_chunks_do_not_cut_sentences_in_half() -> None:
     """Confirm every policy sentence stays whole inside one chunk."""
-    chunks = chunk_policy_file(POLICY_PATH)
+    chunks = chunk_policy_file(EXPENSE_POLICY_FIXTURE)
     sentences = [
         "Employees may claim up to $65 per day for meals while traveling overnight.",
         "Alcohol is not reimbursable.",
@@ -139,9 +139,21 @@ def test_missing_title_is_rejected() -> None:
         chunk_policy("## 1. Meals\nEmployees may claim up to $65 per day.\n")
 
 
-def test_chunk_id_encodes_version_and_section() -> None:
-    """Keep the chunk id tied to the policy version and section number."""
-    assert chunk_id_for("2.0", "5") == "expense-policy:v2.0:section-5"
+def test_chunk_id_encodes_the_document_slug_version_and_section() -> None:
+    """Keep the chunk id tied to the document slug, version, and section number."""
+    assert (
+        chunk_id_for("Employee Expense Policy", "2.0", "5")
+        == "employee-expense-policy:v2.0:section-5"
+    )
+
+
+def test_chunk_id_keeps_different_documents_from_colliding() -> None:
+    """Give two policies with the same version and section number different ids."""
+    hr_id = chunk_id_for("HR Policy", "2.0", "1")
+    time_id = chunk_id_for("Time & Usage Policy", "2.0", "1")
+    assert hr_id != time_id
+    assert hr_id == "hr-policy:v2.0:section-1"
+    assert time_id == "time-and-usage-policy:v2.0:section-1"
 
 
 def test_section_that_ends_mid_sentence_is_rejected() -> None:
@@ -176,7 +188,7 @@ def test_hyphenated_version_heading_is_accepted() -> None:
     chunks = chunk_policy(markdown)
     assert chunks[0].version == "2.0"
     assert chunks[0].document == "Employee Expense Policy"
-    assert chunks[0].chunk_id == "expense-policy:v2.0:section-1"
+    assert chunks[0].chunk_id == "employee-expense-policy:v2.0:section-1"
 
 
 def test_empty_section_is_rejected() -> None:

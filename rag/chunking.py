@@ -8,7 +8,8 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from rag.schema import CHUNK_ID_PREFIX, VERSION_PATTERN, PolicyChunk
+from rag.schema import VERSION_PATTERN, PolicyChunk
+from rag.slug import slugify
 
 TITLE_RE = re.compile(
     rf"^#\s+(?P<document>.+?)\s+[—–-]\s+Version\s+(?P<version>{VERSION_PATTERN})\s*$",
@@ -21,9 +22,14 @@ SECTION_HEADING_RE = re.compile(
 SENTENCE_END_RE = re.compile(r"[.!?]$")
 
 
-def chunk_id_for(version: str, section: str) -> str:
-    """Build the stable chunk id for a policy version and section."""
-    return f"{CHUNK_ID_PREFIX}:v{version}:section-{section}"
+def chunk_id_for(document: str, version: str, section: str) -> str:
+    """Build the stable chunk id for a policy document, version, and section.
+
+    The document slug is what keeps two different policies from colliding on
+    the same id: `HR Policy` section 1 and `Time & Usage Policy` section 1
+    both exist, and only the slug tells them apart.
+    """
+    return f"{slugify(document)}:v{version}:section-{section}"
 
 
 def chunk_policy_file(path: str | Path) -> list[PolicyChunk]:
@@ -50,7 +56,7 @@ def chunk_policy(markdown: str) -> list[PolicyChunk]:
         section = heading.group("section")
         chunks.append(
             PolicyChunk(
-                chunk_id=chunk_id_for(version, section),
+                chunk_id=chunk_id_for(document, version, section),
                 document=document,
                 version=version,
                 section=section,

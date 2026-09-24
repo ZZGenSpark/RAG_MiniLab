@@ -34,7 +34,7 @@ def test_embedded_chunk_requires_a_complete_vector() -> None:
     """Reject an embedded chunk whose vector is empty."""
     with pytest.raises(ValidationError):
         EmbeddedChunk(
-            chunk_id="expense-policy:v2.0:section-1",
+            chunk_id="employee-expense-policy:v2.0:section-1",
             document="Employee Expense Policy",
             version="2.0",
             section="1",
@@ -92,7 +92,7 @@ def test_unsupported_answer_has_no_citation() -> None:
 def test_policy_chunk_citation_label_drops_the_stored_text() -> None:
     """Expose the numbered section label without the chunk body."""
     chunk = PolicyChunk(
-        chunk_id="expense-policy:v2.0:section-1",
+        chunk_id="employee-expense-policy:v2.0:section-1",
         document="Employee Expense Policy",
         version="2.0",
         section="1",
@@ -123,7 +123,7 @@ def test_chunk_metadata_rejects_unknown_fields() -> None:
 def test_embedded_chunk_from_stored_coerces_vector_values() -> None:
     """Rebuild a stored record and keep every vector component as a float."""
     embedded = EmbeddedChunk.from_stored(
-        chunk_id="expense-policy:v2.0:section-1",
+        chunk_id="employee-expense-policy:v2.0:section-1",
         text="Employees may claim up to $65 per day.",
         metadata={
             "document": "Employee Expense Policy",
@@ -147,7 +147,7 @@ def test_chroma_records_reject_unequal_field_lengths() -> None:
     )
     with pytest.raises(ValidationError, match="same length"):
         ChromaRecords(
-            ids=["expense-policy:v2.0:section-1"],
+            ids=["employee-expense-policy:v2.0:section-1"],
             documents=["Employees may claim up to $65 per day.", "Hotels are reimbursable."],
             embeddings=[[1.0, 0.0]],
             metadatas=[metadata],
@@ -157,7 +157,7 @@ def test_chroma_records_reject_unequal_field_lengths() -> None:
 def test_to_chroma_records_requires_one_vector_per_chunk() -> None:
     """Reject a batch that has a different number of chunks and vectors."""
     chunk = PolicyChunk(
-        chunk_id="expense-policy:v2.0:section-1",
+        chunk_id="employee-expense-policy:v2.0:section-1",
         document="Employee Expense Policy",
         version="2.0",
         section="1",
@@ -171,7 +171,7 @@ def test_to_chroma_records_requires_one_vector_per_chunk() -> None:
 def test_as_upsert_serializes_metadata_as_dicts() -> None:
     """Dump citation metadata to plain dicts for the Chroma client."""
     chunk = PolicyChunk(
-        chunk_id="expense-policy:v2.0:section-1",
+        chunk_id="employee-expense-policy:v2.0:section-1",
         document="Employee Expense Policy",
         version="2.0",
         section="1",
@@ -179,7 +179,7 @@ def test_as_upsert_serializes_metadata_as_dicts() -> None:
         text="Employees may claim up to $65 per day.",
     )
     payload = to_chroma_records([chunk], [[1.0, 0.0]]).as_upsert()
-    assert payload["ids"] == ["expense-policy:v2.0:section-1"]
+    assert payload["ids"] == ["employee-expense-policy:v2.0:section-1"]
     assert payload["documents"] == ["Employees may claim up to $65 per day."]
     assert payload["embeddings"] == [[1.0, 0.0]]
     assert payload["metadatas"] == [

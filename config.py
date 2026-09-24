@@ -15,9 +15,8 @@ load_dotenv()
 
 REPO_ROOT = Path(__file__).resolve().parent
 
-# Paths
+# Paths. The lab corpus is the markdown under source/policies/.
 SOURCE_DIR = REPO_ROOT / "source"
-POLICY_PATH = Path(os.getenv("POLICY_PATH", SOURCE_DIR / "policy.md"))
 POLICIES_DIR = SOURCE_DIR / "policies"
 # Five policies are preprocessed into markdown. HR v1 and Preparedness v1 stay binaries.
 INGEST_SOURCES = (
@@ -48,4 +47,3 @@ TOP_K = 3
 # Chroma collection
 COLLECTION_NAME = "expense_policy"
 DISTANCE_SPACE = "cosine"
-CHUNK_ID_PREFIX = "expense-policy"

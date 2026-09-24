@@ -9,7 +9,8 @@ from typing import Sequence
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from config import CHUNK_ID_PREFIX, COLLECTION_NAME, DISTANCE_SPACE, TOP_K
+from config import COLLECTION_NAME, DISTANCE_SPACE, TOP_K
+from rag.slug import slugify
 
 COLLECTION_METADATA = {"hnsw:space": DISTANCE_SPACE}
 VERSION_PATTERN = r"\d+\.\d+"
@@ -41,9 +42,9 @@ class PolicyChunk(ChunkMetadata):
     text: str = Field(min_length=1)
 
     @model_validator(mode="after")
-    def chunk_id_matches_version_and_section(self) -> PolicyChunk:
-        """Require the chunk id to encode the version and section."""
-        expected = f"{CHUNK_ID_PREFIX}:v{self.version}:section-{self.section}"
+    def chunk_id_matches_document_version_and_section(self) -> PolicyChunk:
+        """Require the chunk id to encode the document slug, version, and section."""
+        expected = f"{slugify(self.document)}:v{self.version}:section-{self.section}"
         if self.chunk_id != expected:
             raise ValueError(f"chunk_id must be {expected}")
         return self

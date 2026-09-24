@@ -15,6 +15,7 @@ from docx import Document
 from pypdf import PdfReader
 
 from config import INGEST_SOURCES, POLICIES_DIR
+from rag.slug import slugify
 
 TITLE_RE = re.compile(
     r"^(?P<title>.+?)\s+[—–-]\s+Version\s+(?P<version>\d+\.\d+)\s*$"
@@ -183,8 +184,7 @@ def _markdown_name(markdown: str) -> str:
     match = TITLE_RE.match(first)
     if match is None:
         raise ValueError("markdown is missing a '# Title — Version X.Y' heading")
-    slug = match.group("title").lower().replace("&", "and")
-    slug = re.sub(r"[^a-z0-9]+", "-", slug).strip("-")
+    slug = slugify(match.group("title"))
     return f"{slug}-v{match.group('version')}.md"
 
 

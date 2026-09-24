@@ -5,7 +5,6 @@ from pathlib import Path
 import pytest
 
 from adapter.chroma_store import ChromaPolicyStore
-from config import POLICY_PATH
 from rag.chunking import chunk_policy_file
 from rag.schema import (
     COLLECTION_NAME,
@@ -13,13 +12,14 @@ from rag.schema import (
     REQUIRED_METADATA_KEYS,
     to_chroma_records,
 )
+from tests.support import EXPENSE_POLICY_FIXTURE
 
 EMBEDDING_DIM = 8
 
 
 def _chunks():
     """Load the six chunks from the policy file."""
-    return chunk_policy_file(POLICY_PATH)
+    return chunk_policy_file(EXPENSE_POLICY_FIXTURE)
 
 
 def _embeddings(count: int, dim: int = EMBEDDING_DIM):

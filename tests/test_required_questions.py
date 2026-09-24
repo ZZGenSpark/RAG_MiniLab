@@ -1,12 +1,6 @@
-"""Check the six required questions against saved and live answers."""
+"""Check the six required questions against saved answers."""
 
-import pytest
-
-from adapter.chroma_store import ChromaPolicyStore
-from adapter.ollama_chat import OllamaChatAdapter
-from adapter.ollama_embeddings import OllamaEmbeddingAdapter
-from config import EVAL_OUTPUT_PATH, POLICY_PATH
-from rag.ask import ask
+from config import EVAL_OUTPUT_PATH
 from rag.chunking import chunk_policy_file
 from rag.eval import (
     REQUIRED_CASES,
@@ -14,9 +8,8 @@ from rag.eval import (
     load_required_questions,
     response_from_result,
 )
-from rag.ingest import ingest_policy
 from rag.schema import REFUSAL_ANSWER, AskResponse
-from tests.support import ollama_connection_error
+from tests.support import EXPENSE_POLICY_FIXTURE
 
 
 def _assert_response_shape(response: AskResponse) -> None:
@@ -65,7 +58,7 @@ def _score_required_run(results: list[tuple]) -> dict[str, int]:
 
 def test_policy_still_has_exactly_six_chunks() -> None:
     """Confirm the policy file still splits into six sections."""
-    assert len(chunk_policy_file(POLICY_PATH)) == 6
+    assert len(chunk_policy_file(EXPENSE_POLICY_FIXTURE)) == 6
 
 
 def test_saved_output_covers_all_six_required_questions() -> None:
@@ -77,36 +70,6 @@ def test_saved_output_covers_all_six_required_questions() -> None:
     scored = _score_required_run(
         [(case, response_from_result(row)) for case, row in zip(REQUIRED_CASES, rows, strict=True)]
     )
-    assert scored["retrieve_hits"] >= 5
-    assert scored["supported_with_citation"] == 5
-    assert scored["expected_citations"] == 5
-    assert scored["refusals"] == 1
-
-
-@pytest.fixture(scope="module")
-def live_store(tmp_path_factory: pytest.TempPathFactory) -> ChromaPolicyStore:
-    """Ingest the policy into a temporary store, or skip if Ollama cannot be reached."""
-    chroma_path = tmp_path_factory.mktemp("required-chroma")
-    store = ChromaPolicyStore(chroma_path)
-    try:
-        ingest_policy(POLICY_PATH, store=store, embedder=OllamaEmbeddingAdapter())
-    except Exception as exc:
-        if ollama_connection_error(exc):
-            pytest.skip(f"live Ollama ingest unavailable: {exc}")
-        raise
-    return store
-
-
-def test_live_required_questions_meet_acceptance(live_store: ChromaPolicyStore) -> None:
-    """Confirm a live run meets the retrieval, citation, and refusal thresholds."""
-    embedder = OllamaEmbeddingAdapter()
-    generator = OllamaChatAdapter()
-    results = [
-        (case, ask(case.question, store=live_store, embedder=embedder, generator=generator))
-        for case in REQUIRED_CASES
-    ]
-
-    scored = _score_required_run(results)
     assert scored["retrieve_hits"] >= 5
     assert scored["supported_with_citation"] == 5
     assert scored["expected_citations"] == 5

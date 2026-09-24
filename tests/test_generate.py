@@ -21,7 +21,7 @@ def _chunk(
 ) -> RetrievedChunk:
     """Build a retrieved chunk fixture for generation tests."""
     return RetrievedChunk(
-        chunk_id=f"expense-policy:v2.0:section-{section}",
+        chunk_id=f"employee-expense-policy:v2.0:section-{section}",
         document="Employee Expense Policy",
         version="2.0",
         section=section,

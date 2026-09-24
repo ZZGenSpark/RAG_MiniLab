@@ -7,9 +7,9 @@ import pytest
 
 from adapter.chroma_store import ChromaPolicyStore
 from adapter.ollama_embeddings import DOCUMENT_PREFIX, QUERY_PREFIX, OllamaEmbeddingAdapter
-from config import POLICY_PATH
 from rag.chunking import chunk_policy_file
 from rag.ingest import ingest_policy
+from tests.support import EXPENSE_POLICY_FIXTURE
 
 EMBEDDING_DIM = 8
 
@@ -53,7 +53,7 @@ class FakeEmbedder:
 
 def test_embedder_returns_one_complete_vector_per_chunk() -> None:
     """Return one full vector for each of the six policy chunks."""
-    chunks = chunk_policy_file(POLICY_PATH)
+    chunks = chunk_policy_file(EXPENSE_POLICY_FIXTURE)
     client = FakeOllama()
     embedder = OllamaEmbeddingAdapter(model="nomic-embed-text", client=client)
 
@@ -119,22 +119,72 @@ def test_ingest_embeds_chunks_and_upserts_six_chroma_records(tmp_path: Path) -> 
     store = ChromaPolicyStore(tmp_path / "chroma")
 
     written_ids = ingest_policy(
-        POLICY_PATH,
+        EXPENSE_POLICY_FIXTURE,
         store=store,
         embedder=embedder,
     )
 
     assert written_ids == [
-        "expense-policy:v2.0:section-1",
-        "expense-policy:v2.0:section-2",
-        "expense-policy:v2.0:section-3",
-        "expense-policy:v2.0:section-4",
-        "expense-policy:v2.0:section-5",
-        "expense-policy:v2.0:section-6",
+        "employee-expense-policy:v2.0:section-1",
+        "employee-expense-policy:v2.0:section-2",
+        "employee-expense-policy:v2.0:section-3",
+        "employee-expense-policy:v2.0:section-4",
+        "employee-expense-policy:v2.0:section-5",
+        "employee-expense-policy:v2.0:section-6",
     ]
     stored = store.get_all()
     assert store.count() == 6
     assert [record.chunk_id for record in stored] == written_ids
     assert all(len(record.embedding) == EMBEDDING_DIM for record in stored)
     assert stored[0].text.startswith("Employees may claim up to $65 per day")
-    assert embedder.calls == [[chunk.text for chunk in chunk_policy_file(POLICY_PATH)]]
+    assert embedder.calls == [[chunk.text for chunk in chunk_policy_file(EXPENSE_POLICY_FIXTURE)]]
+
+
+def test_ingest_reads_every_markdown_file_in_a_directory(tmp_path: Path) -> None:
+    """Treat a directory as the policy input and store its markdown sections."""
+    policies = tmp_path / "policies"
+    policies.mkdir()
+    (policies / "expense-policy.md").write_text(
+        EXPENSE_POLICY_FIXTURE.read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
+    embedder = FakeEmbedder()
+    store = ChromaPolicyStore(tmp_path / "chroma")
+
+    written_ids = ingest_policy(policies, store=store, embedder=embedder)
+
+    assert written_ids == [chunk.chunk_id for chunk in chunk_policy_file(EXPENSE_POLICY_FIXTURE)]
+    assert store.count() == 6
+
+
+def test_ingest_rejects_a_directory_with_no_markdown(tmp_path: Path) -> None:
+    """Reject a policy directory that has nothing to chunk."""
+    policies = tmp_path / "policies"
+    policies.mkdir()
+    with pytest.raises(ValueError, match="no markdown policies"):
+        ingest_policy(policies, store=ChromaPolicyStore(tmp_path / "chroma"), embedder=FakeEmbedder())
+
+
+def test_ingest_rejects_duplicate_chunk_ids_before_embedding(tmp_path: Path) -> None:
+    """Refuse a directory whose files would overwrite one another in the store."""
+    policies = tmp_path / "policies"
+    policies.mkdir()
+    text = EXPENSE_POLICY_FIXTURE.read_text(encoding="utf-8")
+    (policies / "a.md").write_text(text, encoding="utf-8")
+    (policies / "b.md").write_text(text, encoding="utf-8")
+
+    class ExplodingEmbedder:
+        def embed_texts(self, texts: list[str]) -> list[list[float]]:
+            """Fail if colliding policies are embedded."""
+            raise AssertionError("duplicate chunk ids are rejected before embedding")
+
+        def embed_query(self, text: str) -> list[float]:
+            """Fail if colliding policies are embedded."""
+            raise AssertionError("duplicate chunk ids are rejected before embedding")
+
+    with pytest.raises(ValueError, match="unique"):
+        ingest_policy(
+            policies,
+            store=ChromaPolicyStore(tmp_path / "chroma"),
+            embedder=ExplodingEmbedder(),
+        )

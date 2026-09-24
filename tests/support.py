@@ -1,10 +1,7 @@
-"""Helpers for tests that talk to a live Ollama server."""
+"""Shared paths for tests that still use the six-section expense fixture."""
 
 from __future__ import annotations
 
-import httpx
+from pathlib import Path
 
-
-def ollama_connection_error(exc: BaseException) -> bool:
-    """Return whether the error means Ollama could not be reached."""
-    return isinstance(exc, (ConnectionError, TimeoutError, httpx.TransportError))
+EXPENSE_POLICY_FIXTURE = Path(__file__).resolve().parent / "fixtures" / "expense-policy.md"
