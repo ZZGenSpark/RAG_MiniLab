@@ -2,11 +2,14 @@
 
 from types import SimpleNamespace
 
+import pytest
+
 from adapter.chroma_store import ChromaPolicyStore
 from adapter.ollama_chat import OllamaChatAdapter
 from config import CHAT_TEMPERATURE
 from rag.ask import ask
-from rag.generate import REFUSAL_ANSWER, generate_answer
+from prompt.grounded_excerpt import INSTRUCTION, build_grounded_excerpt_prompt
+from rag.generate import REFUSAL_ANSWER, build_prompt, generate_answer
 from rag.schema import PolicyChunk, RetrievedChunk
 
 
@@ -169,6 +172,75 @@ def test_gym_membership_is_an_unsupported_question_example() -> None:
     assert len(chat.prompts) == 3
 
 
+def test_fenced_json_is_parsed_as_the_model_answer() -> None:
+    """Accept a JSON object wrapped in a markdown fence."""
+    chat = FakeGenerator(
+        '```json\n{"answerable": true, "answer": "Employees may claim up to $65 per day for meals."}\n```'
+    )
+    answer, citation = generate_answer(
+        "How much can I spend on food each day?",
+        [MEALS],
+        generator=chat,
+    )
+    assert "$65" in answer
+    assert citation is not None
+    assert citation.section == "1. Meals"
+
+
+def test_answerable_flag_with_an_empty_answer_is_not_cited() -> None:
+    """Refuse a chunk the model marks answerable but leaves blank."""
+    chat = FakeGenerator('{"answerable": true, "answer": "   "}')
+    answer, citation = generate_answer(
+        "How much can I spend on food each day?",
+        [MEALS],
+        generator=chat,
+    )
+    assert answer == REFUSAL_ANSWER
+    assert citation is None
+
+
+def test_number_from_the_question_is_allowed_in_the_answer() -> None:
+    """Allow an amount that appears in the question even when the excerpt uses another amount."""
+    chat = FakeGenerator(
+        '{"answerable": true, "answer": "A manager must approve a hotel that costs $250."}'
+    )
+    answer, citation = generate_answer(
+        "My hotel costs $250. What do I need?",
+        [HOTELS],
+        generator=chat,
+    )
+    assert citation is not None
+    assert citation.section == "2. Hotels"
+    assert "$250" in answer
+
+
+def test_number_missing_from_excerpt_and_question_is_not_cited() -> None:
+    """Skip an answer that introduces a number present in neither the excerpt nor the question."""
+    chat = FakeGenerator('{"answerable": true, "answer": "You need approval from 9 managers."}')
+    answer, citation = generate_answer(
+        "My hotel costs $250. What do I need?",
+        [HOTELS],
+        generator=chat,
+    )
+    assert answer == REFUSAL_ANSWER
+    assert citation is None
+
+
+def test_prompt_quotes_only_the_selected_excerpt() -> None:
+    """Put the instruction, question, section label, and excerpt text in the prompt."""
+    prompt = build_prompt("How much can I spend on food each day?", MEALS)
+    assert prompt == build_grounded_excerpt_prompt(
+        "How much can I spend on food each day?",
+        "1. Meals",
+        MEALS.text,
+    )
+    assert INSTRUCTION in prompt
+    assert "Question: How much can I spend on food each day?" in prompt
+    assert "[Section 1. Meals]" in prompt
+    assert MEALS.text in prompt
+    assert "Hotels" not in prompt
+
+
 def test_unparseable_model_text_is_not_cited() -> None:
     """Refuse when the model returns text that is not the expected JSON."""
     chat = FakeGenerator("Employees may claim up to $65 per day for meals.")
@@ -241,6 +313,30 @@ def test_ask_builds_structured_response_from_retrieval_not_the_model(tmp_path) -
     assert "1. Meals" in {chunk.section for chunk in response.retrieved_chunks}
 
 
+def test_ask_refusal_keeps_the_retrieved_chunks(tmp_path) -> None:
+    """Return the refusal and the retrieved excerpts when no chunk can answer."""
+    store = _store_with_meals(tmp_path)
+    chat = FakeGenerator(NOT_ANSWERABLE)
+
+    response = ask(
+        "Does the company reimburse gym memberships?",
+        store=store,
+        embedder=FakeEmbedder(),
+        generator=chat,
+    )
+
+    assert response.answer == REFUSAL_ANSWER
+    assert response.citation is None
+    assert [chunk.section for chunk in response.retrieved_chunks][0] == "1. Meals"
+    assert {chunk.section for chunk in response.retrieved_chunks} == {
+        "1. Meals",
+        "2. Hotels",
+        "6. Submission Deadline",
+    }
+    distances = [chunk.distance for chunk in response.retrieved_chunks]
+    assert distances == sorted(distances)
+
+
 def test_ollama_chat_adapter_returns_message_text() -> None:
     """Read the Ollama message body and return it as plain text."""
 
@@ -258,3 +354,28 @@ def test_ollama_chat_adapter_returns_message_text() -> None:
     assert client.messages == [{"role": "user", "content": "Question: meals"}]
     assert client.kwargs["think"] is False
     assert client.kwargs["options"] == {"temperature": CHAT_TEMPERATURE}
+    assert "answerable" in client.kwargs["format"]["properties"]
+
+
+def test_ollama_chat_adapter_reads_a_dict_response() -> None:
+    """Read message text when the client returns a plain dictionary."""
+
+    class DictClient:
+        def chat(self, model: str, messages: list, **kwargs):
+            """Return one scripted dictionary response."""
+            return {"message": {"content": '{"answerable": false, "answer": ""}'}}
+
+    text = OllamaChatAdapter(client=DictClient()).complete("Question: gym")
+    assert text == '{"answerable": false, "answer": ""}'
+
+
+def test_ollama_chat_adapter_rejects_an_empty_response() -> None:
+    """Reject a chat response that has no message text."""
+
+    class EmptyClient:
+        def chat(self, model: str, messages: list, **kwargs):
+            """Return a message with no content."""
+            return SimpleNamespace(message=SimpleNamespace(content=""))
+
+    with pytest.raises(ValueError, match="empty response"):
+        OllamaChatAdapter(client=EmptyClient()).complete("Question: meals")

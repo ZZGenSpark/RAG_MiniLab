@@ -75,6 +75,31 @@ def test_query_embedding_uses_the_search_prefix() -> None:
     assert len(vector) == EMBEDDING_DIM
 
 
+def test_embedder_returns_nothing_for_an_empty_batch() -> None:
+    """Skip the embedding client when there is no text to embed."""
+
+    class ExplodingClient:
+        def embed(self, model: str, input: str | list[str]):
+            """Fail if an empty batch reaches the client."""
+            raise AssertionError("empty batches are not sent to the embedding client")
+
+    assert OllamaEmbeddingAdapter(client=ExplodingClient()).embed_texts([]) == []
+
+
+def test_embedder_rejects_a_short_vector_batch() -> None:
+    """Reject a client that returns fewer vectors than input texts."""
+
+    class ShortClient:
+        def embed(self, model: str, input: str | list[str]):
+            """Return a single vector regardless of how many texts were sent."""
+            return SimpleNamespace(embeddings=[[0.1, 0.2]])
+
+    with pytest.raises(ValueError, match="one vector per chunk"):
+        OllamaEmbeddingAdapter(client=ShortClient()).embed_texts(
+            ["Employees may claim up to $65 per day.", "Hotels are reimbursable."]
+        )
+
+
 def test_embedder_rejects_empty_vectors() -> None:
     """Reject an embedding client that returns empty vectors."""
 
@@ -112,3 +137,4 @@ def test_ingest_embeds_chunks_and_upserts_six_chroma_records(tmp_path: Path) -> 
     assert [record.chunk_id for record in stored] == written_ids
     assert all(len(record.embedding) == EMBEDDING_DIM for record in stored)
     assert stored[0].text.startswith("Employees may claim up to $65 per day")
+    assert embedder.calls == [[chunk.text for chunk in chunk_policy_file(POLICY_PATH)]]

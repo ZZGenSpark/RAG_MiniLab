@@ -75,6 +75,44 @@ def test_retrieve_returns_at_most_three_chunks_sorted_by_cosine_distance(ranked_
     assert embedder.calls == [["How much can I spend on food each day?"]]
 
 
+def test_retrieve_rejects_a_blank_question(ranked_store: ChromaPolicyStore) -> None:
+    """Reject a question that has no text before any embedding call."""
+
+    class ExplodingEmbedder:
+        def embed_texts(self, texts: list[str]) -> list[list[float]]:
+            """Fail if a blank question is embedded."""
+            raise AssertionError("blank questions are not embedded")
+
+        def embed_query(self, text: str) -> list[float]:
+            """Fail if a blank question is embedded."""
+            raise AssertionError("blank questions are not embedded")
+
+    with pytest.raises(ValueError, match="empty"):
+        retrieve("   ", store=ranked_store, embedder=ExplodingEmbedder())
+
+
+def test_retrieve_caps_the_caller_limit_at_top_k(ranked_store: ChromaPolicyStore) -> None:
+    """Return at most the configured top-k even when the caller asks for more."""
+    hits = retrieve(
+        "How much can I spend on food each day?",
+        store=ranked_store,
+        embedder=FakeEmbedder([0.95, 0.2, 0.1, 0.0, 0.0, 0.0]),
+        n_results=10,
+    )
+    assert len(hits) == 3
+
+
+def test_retrieve_honors_a_smaller_result_limit(ranked_store: ChromaPolicyStore) -> None:
+    """Return fewer than top-k when the caller asks for a smaller limit."""
+    hits = retrieve(
+        "How much can I spend on food each day?",
+        store=ranked_store,
+        embedder=FakeEmbedder([0.95, 0.2, 0.1, 0.0, 0.0, 0.0]),
+        n_results=1,
+    )
+    assert [hit.citation_section for hit in hits] == ["1. Meals"]
+
+
 def test_retrieve_does_not_depend_on_exact_keywords(ranked_store: ChromaPolicyStore) -> None:
     """Rank the airfare section first from the query embedding alone."""
     hits = retrieve(

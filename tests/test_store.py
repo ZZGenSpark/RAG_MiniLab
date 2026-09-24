@@ -96,6 +96,38 @@ def test_upsert_drops_ids_missing_from_the_batch(tmp_path: Path) -> None:
     assert [record.section for record in store.get_all()] == ["1", "2", "3", "4", "5"]
 
 
+def test_query_on_an_empty_collection_returns_no_hits(tmp_path: Path) -> None:
+    """Return no hits when nothing has been stored."""
+    store = ChromaPolicyStore(tmp_path / "chroma")
+    assert store.query_similar([1.0, 0.0], n_results=3) == []
+    assert store.get_all() == []
+
+
+def test_query_rejects_a_non_positive_result_limit(tmp_path: Path) -> None:
+    """Reject a request for zero nearest chunks."""
+    store = ChromaPolicyStore(tmp_path / "chroma")
+    with pytest.raises(ValueError, match="at least 1"):
+        store.query_similar([1.0, 0.0], n_results=0)
+
+
+def test_query_rejects_an_empty_vector(tmp_path: Path) -> None:
+    """Reject a query that has no embedding components."""
+    chunks = _chunks()
+    store = ChromaPolicyStore(tmp_path / "chroma")
+    store.upsert_chunks(chunks, _embeddings(len(chunks)))
+    with pytest.raises(ValueError, match="complete vector"):
+        store.query_similar([], n_results=1)
+
+
+def test_get_all_sorts_by_section_number(tmp_path: Path) -> None:
+    """Return stored chunks in section order even when the batch is reversed."""
+    chunks = _chunks()
+    reversed_chunks = list(reversed(chunks))
+    store = ChromaPolicyStore(tmp_path / "chroma")
+    store.upsert_chunks(reversed_chunks, _embeddings(len(reversed_chunks)))
+    assert [record.section for record in store.get_all()] == ["1", "2", "3", "4", "5", "6"]
+
+
 def test_query_can_return_every_stored_chunk(tmp_path: Path) -> None:
     """Honor n_results above the ask cap of three."""
     chunks = _chunks()

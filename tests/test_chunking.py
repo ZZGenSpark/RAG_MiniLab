@@ -3,7 +3,7 @@
 import pytest
 
 from config import POLICY_PATH
-from rag.chunking import chunk_policy, chunk_policy_file
+from rag.chunking import chunk_id_for, chunk_policy, chunk_policy_file
 from rag.schema import PolicyChunk
 
 EXPECTED_CHUNKS = [
@@ -137,6 +137,46 @@ def test_missing_title_is_rejected() -> None:
     """Reject markdown that has no document title and version."""
     with pytest.raises(ValueError, match="missing"):
         chunk_policy("## 1. Meals\nEmployees may claim up to $65 per day.\n")
+
+
+def test_chunk_id_encodes_version_and_section() -> None:
+    """Keep the chunk id tied to the policy version and section number."""
+    assert chunk_id_for("2.0", "5") == "expense-policy:v2.0:section-5"
+
+
+def test_section_that_ends_mid_sentence_is_rejected() -> None:
+    """Reject a section body that does not finish a sentence."""
+    markdown = (
+        "# Employee Expense Policy — Version 2.0\n\n"
+        "## 1. Meals\n"
+        "Employees may claim up to $65 per day"
+    )
+    with pytest.raises(ValueError, match="mid-sentence"):
+        chunk_policy(markdown)
+
+
+def test_section_that_starts_mid_sentence_is_rejected() -> None:
+    """Reject a section body that begins in the middle of a sentence."""
+    markdown = (
+        "# Employee Expense Policy — Version 2.0\n\n"
+        "## 1. Meals\n"
+        "up to $65 per day."
+    )
+    with pytest.raises(ValueError, match="mid-sentence"):
+        chunk_policy(markdown)
+
+
+def test_hyphenated_version_heading_is_accepted() -> None:
+    """Accept a title that separates the version with a hyphen."""
+    markdown = (
+        "# Employee Expense Policy - Version 2.0\n\n"
+        "## 1. Meals\n"
+        "Employees may claim up to $65 per day.\n"
+    )
+    chunks = chunk_policy(markdown)
+    assert chunks[0].version == "2.0"
+    assert chunks[0].document == "Employee Expense Policy"
+    assert chunks[0].chunk_id == "expense-policy:v2.0:section-1"
 
 
 def test_empty_section_is_rejected() -> None:
