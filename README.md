@@ -20,6 +20,14 @@ Reads the markdown files in `source/policies/`, chunks each numbered section, an
 
 Optional: `python ingest.py --policies source/policies --chroma-path /path/to/chroma`
 
+## Minimal loop
+
+```bash
+python scripts/minimal_loop.py
+```
+
+Embeds two known texts with Ollama, stores them in a temporary Chroma directory, and prints which text the question retrieved. This runs before the full corpus ingest. `pytest` covers the same loop with a fake embedder.
+
 ## Ask
 
 ```bash

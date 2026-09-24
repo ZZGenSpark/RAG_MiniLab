@@ -1,19 +1,19 @@
 [tool.ruff]
 target-version = "py312"
 line-length = 120
-src = ["rag", "adapter", "prompt", "tests"]
+src = ["rag", "adapter", "prompt", "tests", "scripts"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["adapter", "config", "prompt", "rag", "tests"]
+known-first-party = ["adapter", "config", "prompt", "rag", "scripts", "tests"]
 
 [tool.mypy]
 python_version = "3.12"
 explicit_package_bases = true
 mypy_path = "."
-files = ["rag", "adapter", "prompt", "tests", "ask.py", "ingest.py", "config.py"]
+files = ["rag", "adapter", "prompt", "tests", "scripts", "ask.py", "ingest.py", "config.py"]
 ignore_missing_imports = true
 warn_redundant_casts = true
 warn_unused_ignores = true
