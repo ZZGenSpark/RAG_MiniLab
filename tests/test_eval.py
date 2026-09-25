@@ -60,17 +60,18 @@ def test_response_from_result_rebuilds_the_saved_ask_response() -> None:
     result = {
         "question": "How much can I spend on food each day?",
         "response": {
-            "answer": "Employees may claim up to $65 per day for meals.",
-            "citation": {
-                "document": "Employee Expense Policy",
-                "version": "2.0",
-                "section": "1. Meals",
-            },
-            "retrieved_chunks": [{"section": "1. Meals", "distance": 0.08}],
+            "answer": "Every email must include a joke.",
+            "citations": [
+                {
+                    "document": "HR Policy",
+                    "version": "2.0",
+                    "section": "3.1 Requirement",
+                }
+            ],
+            "retrieved_chunks": [{"section": "3.1 Requirement", "distance": 0.08}],
         },
     }
     response = response_from_result(result)
-    assert response.answer == "Employees may claim up to $65 per day for meals."
-    assert response.citation is not None
-    assert response.citation.section == "1. Meals"
+    assert response.answer == "Every email must include a joke."
+    assert [citation.section for citation in response.citations] == ["3.1 Requirement"]
     assert response.retrieved_chunks[0].distance == 0.08

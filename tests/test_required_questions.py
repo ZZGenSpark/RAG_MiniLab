@@ -31,20 +31,19 @@ def _score_required_run(results: list[tuple]) -> dict[str, int]:
         _assert_response_shape(response)
         retrieved = {chunk.section for chunk in response.retrieved_chunks}
 
+        cited = [citation.section for citation in response.citations]
         if case.expected_citation is None:
-            assert response.citation is None
+            assert cited == []
             assert response.answer == REFUSAL_ANSWER
             refusals += 1
             continue
 
         if case.expected_citation in retrieved:
             retrieve_hits += 1
-        assert response.citation is not None
-        assert response.citation.document == "Employee Expense Policy"
-        assert response.citation.version == "2.0"
-        assert response.citation.section in retrieved
+        assert cited
+        assert all(section in retrieved for section in cited)
         supported_with_citation += 1
-        if response.citation.section == case.expected_citation:
+        if case.expected_citation in cited:
             expected_citations += 1
             assert answer_matches(case, response.answer)
 

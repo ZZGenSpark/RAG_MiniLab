@@ -64,20 +64,22 @@ def test_ask_response_matches_assignment_shape() -> None:
     response = AskResponse.model_validate(
         {
             "answer": "Employees may claim up to $65 per day for meals.",
-            "citation": {
-                "document": "Employee Expense Policy",
-                "version": "2.0",
-                "section": "1. Meals",
-            },
-            "retrieved_chunks": [{"section": "1. Meals", "distance": 0.08}],
+            "citations": [
+                {
+                    "document": "HR Policy",
+                    "version": "2.0",
+                    "section": "3.1 Requirement",
+                }
+            ],
+            "retrieved_chunks": [{"section": "3.1 Requirement", "distance": 0.08}],
+            "retrieval": {"strategy": "hybrid"},
         }
     )
-    assert response.citation == Citation(
-        document="Employee Expense Policy",
-        version="2.0",
-        section="1. Meals",
-    )
-    assert response.retrieved_chunks == [RetrievedChunkRef(section="1. Meals", distance=0.08)]
+    assert response.citations == [
+        Citation(document="HR Policy", version="2.0", section="3.1 Requirement"),
+    ]
+    assert response.retrieval.strategy == "hybrid"
+    assert response.retrieved_chunks == [RetrievedChunkRef(section="3.1 Requirement", distance=0.08)]
 
 
 def test_citation_must_name_a_retrieved_section() -> None:
@@ -85,12 +87,14 @@ def test_citation_must_name_a_retrieved_section() -> None:
     with pytest.raises(ValidationError, match="retrieved chunks"):
         AskResponse(
             answer="Employees may claim up to $65 per day for meals.",
-            citation=Citation(
-                document="Employee Expense Policy",
-                version="2.0",
-                section="1. Meals",
-            ),
-            retrieved_chunks=[RetrievedChunkRef(section="2. Hotels", distance=0.2)],
+            citations=[
+                Citation(
+                    document="HR Policy",
+                    version="2.0",
+                    section="3.1 Requirement",
+                )
+            ],
+            retrieved_chunks=[RetrievedChunkRef(section="6. Boss Error Grace Period", distance=0.2)],
         )
 
 
@@ -98,10 +102,10 @@ def test_unsupported_answer_has_no_citation() -> None:
     """Allow a refusal answer to omit the citation."""
     response = AskResponse(
         answer="The provided policy does not answer this question.",
-        citation=None,
-        retrieved_chunks=[RetrievedChunkRef(section="6. Submission Deadline", distance=0.4)],
+        citations=[],
+        retrieved_chunks=[RetrievedChunkRef(section="6. Boss Error Grace Period", distance=0.4)],
     )
-    assert response.citation is None
+    assert response.citations == []
 
 
 def test_policy_chunk_citation_label_drops_the_stored_text() -> None:
@@ -233,7 +237,7 @@ def test_grounded_model_output_ignores_extra_keys() -> None:
 def test_ask_response_rejects_an_empty_answer() -> None:
     """Reject a response whose answer text is empty."""
     with pytest.raises(ValidationError):
-        AskResponse(answer="", citation=None, retrieved_chunks=[])
+        AskResponse(answer="", citations=[], retrieved_chunks=[])
 
 
 def test_retrieved_chunks_are_capped_and_sorted() -> None:
@@ -241,11 +245,7 @@ def test_retrieved_chunks_are_capped_and_sorted() -> None:
     with pytest.raises(ValidationError, match="at most 3"):
         AskResponse(
             answer="Employees may claim up to $65 per day for meals.",
-            citation=Citation(
-                document="Employee Expense Policy",
-                version="2.0",
-                section="1. Meals",
-            ),
+            citations=[],
             retrieved_chunks=[
                 RetrievedChunkRef(section="1. Meals", distance=0.1),
                 RetrievedChunkRef(section="2. Hotels", distance=0.2),
@@ -257,11 +257,7 @@ def test_retrieved_chunks_are_capped_and_sorted() -> None:
     with pytest.raises(ValidationError, match="sorted"):
         AskResponse(
             answer="Employees may claim up to $65 per day for meals.",
-            citation=Citation(
-                document="Employee Expense Policy",
-                version="2.0",
-                section="1. Meals",
-            ),
+            citations=[],
             retrieved_chunks=[
                 RetrievedChunkRef(section="2. Hotels", distance=0.2),
                 RetrievedChunkRef(section="1. Meals", distance=0.1),

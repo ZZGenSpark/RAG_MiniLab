@@ -6,6 +6,7 @@ Defines the Chroma record shape and checks ids, metadata, and ranking.
 from __future__ import annotations
 
 from collections.abc import Sequence
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -153,12 +154,21 @@ REFUSAL_ANSWER = "The provided policy does not answer this question."
 
 
 class GroundedModelOutput(BaseModel):
-    """JSON the generation model is asked to return for a single excerpt."""
+    """JSON the generation model returns for the final excerpts."""
 
     model_config = ConfigDict(extra="ignore")
 
     answerable: bool
     answer: str = ""
+    sources: list[int] = Field(default_factory=list)
+
+
+class RetrievalInfo(BaseModel):
+    """The route used for this ask. The only field is the strategy."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    strategy: Literal["vector", "hybrid"] = "vector"
 
 
 class SourceConflict(BaseModel):
@@ -176,9 +186,21 @@ class AskResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     answer: str = Field(min_length=1)
-    citation: Citation | None
+    citations: list[Citation] = Field(default_factory=list)
     retrieved_chunks: list[RetrievedChunkRef] = Field(max_length=TOP_K)
+    retrieval: RetrievalInfo = Field(default_factory=RetrievalInfo)
     source_conflicts: list[SourceConflict] = Field(default_factory=list)
+
+    @model_validator(mode="before")
+    @classmethod
+    def citations_from_a_single_citation(cls, value: object) -> object:
+        """Accept a saved row that still has one citation field."""
+        if not isinstance(value, dict) or "citations" in value or "citation" not in value:
+            return value
+        data = dict(value)
+        single = data.pop("citation")
+        data["citations"] = [] if single is None else [single]
+        return data
 
     @field_validator("retrieved_chunks")
     @classmethod
@@ -190,12 +212,10 @@ class AskResponse(BaseModel):
         return chunks
 
     @model_validator(mode="after")
-    def citation_is_one_of_the_retrieved_chunks(self) -> AskResponse:
-        """Require a citation to name a section that retrieval returned."""
-        if self.citation is None:
-            return self
+    def citations_are_retrieved_sections(self) -> AskResponse:
+        """Require every citation to name a section that retrieval returned."""
         retrieved = {chunk.section for chunk in self.retrieved_chunks}
-        if self.citation.section not in retrieved:
+        if any(citation.section not in retrieved for citation in self.citations):
             raise ValueError("citation section must be one of the retrieved chunks")
         return self
 

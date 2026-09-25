@@ -14,7 +14,7 @@ from rag.generate import Generator, generate_answer
 from rag.rerank import Reranker
 from rag.retrieve import retrieve_outcome
 from rag.route import Router, route
-from rag.schema import AskResponse
+from rag.schema import AskResponse, RetrievalInfo
 from rag.store import PolicyStore
 
 
@@ -32,7 +32,7 @@ def ask(
     decision = route(question, router=router)
     outcome = retrieve_outcome(question, store=store, embedder=embedder, decision=decision, reranker=reranker)
     shown = outcome.chunks[:TOP_K]
-    answer, citation = generate_answer(question, shown, generator=generator)
+    answer, citations = generate_answer(question, shown, generator=generator)
     conflicts = source_conflicts(shown)
     append_audit(
         AuditRecord(
@@ -49,7 +49,8 @@ def ask(
     cited = sorted(shown, key=lambda hit: (hit.distance, hit.chunk_id))
     return AskResponse(
         answer=answer,
-        citation=citation,
+        citations=citations,
         retrieved_chunks=[hit.to_ref() for hit in cited],
+        retrieval=RetrievalInfo(strategy=decision.strategy),
         source_conflicts=conflicts,
     )

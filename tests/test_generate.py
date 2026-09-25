@@ -1,4 +1,4 @@
-"""Test grounded answers, fallbacks, and refusals with fake models."""
+"""Test grounded answers that cite every source used in one prompt."""
 
 from collections.abc import Sequence
 from types import SimpleNamespace
@@ -11,7 +11,7 @@ from config import CHAT_TEMPERATURE
 from prompt.grounded_excerpt import INSTRUCTION, build_grounded_excerpt_prompt
 from rag.ask import ask
 from rag.generate import REFUSAL_ANSWER, build_prompt, generate_answer
-from rag.route import FallbackRouter
+from rag.route import FallbackRouter, RetrievalDecision, Strategy
 from rag.schema import PolicyChunk, RetrievedChunk
 from tests.support import KeepingReranker
 
@@ -22,10 +22,10 @@ def _chunk(
     text: str,
     distance: float,
 ) -> RetrievedChunk:
-    """Build a retrieved chunk fixture for generation tests."""
+    """Build a retrieved HR chunk."""
     return RetrievedChunk(
-        chunk_id=f"employee-expense-policy:v2.0:section-{section}",
-        document="Employee Expense Policy",
+        chunk_id=f"hr-policy:v2.0:section-{section}",
+        document="HR Policy",
         version="2.0",
         section=section,
         section_title=title,
@@ -34,40 +34,51 @@ def _chunk(
     )
 
 
-MEALS = _chunk(
-    "1",
-    "Meals",
-    "Employees may claim up to $65 per day for meals while traveling overnight.\nAlcohol is not reimbursable.",
+JOKE = _chunk(
+    "3.1",
+    "Requirement",
+    "Every email must begin or end with a joke.",
     0.08,
 )
-HOTELS = _chunk(
-    "2",
-    "Hotels",
-    "Hotels are reimbursable up to $225 per night.\nA manager must approve higher rates before booking.",
+LEAVE = _chunk(
+    "5.1",
+    "Leave Entitlement",
+    "Employees receive 5 days of paid leave when they adopt a pet.",
     0.21,
 )
-DEADLINE = _chunk(
+GRACE = _chunk(
     "6",
-    "Submission Deadline",
-    "Expense reports must be submitted within 30 days after travel ends.",
+    "Boss Error Grace Period",
+    "Employees must wait 30 minutes before correcting a boss.",
     0.41,
 )
 
 
-class FakeGenerator:
-    """Returns one response per call, in order. The last response repeats if
-    more calls happen than responses were supplied."""
+def _answer(answer: str, sources: list[int], *, answerable: bool = True) -> str:
+    """Build one model payload."""
+    return (
+        '{"answerable": '
+        + str(answerable).lower()
+        + ', "answer": "'
+        + answer
+        + '", "sources": '
+        + str(sources).replace("'", "")
+        + "}"
+    )
 
-    def __init__(self, *responses: str) -> None:
-        """Store the scripted responses in call order."""
-        self.responses = list(responses)
+
+class FakeGenerator:
+    """Return one scripted response and record the prompt."""
+
+    def __init__(self, response: str) -> None:
+        """Store the only response this generator returns."""
+        self.response = response
         self.prompts: list[str] = []
 
     def complete(self, prompt: str) -> str:
-        """Record the prompt and return the next scripted response."""
+        """Record the prompt and return the scripted response."""
         self.prompts.append(prompt)
-        index = min(len(self.prompts) - 1, len(self.responses) - 1)
-        return self.responses[index]
+        return self.response
 
 
 class FakeEmbedder:
@@ -80,7 +91,242 @@ class FakeEmbedder:
         return self.embed_texts([text])[0]
 
 
-NOT_ANSWERABLE = '{"answerable": false, "answer": ""}'
+class ChoosingRouter:
+    """Return one scripted retrieval strategy."""
+
+    def __init__(self, strategy: Strategy) -> None:
+        """Store the strategy."""
+        self.decision = RetrievalDecision(strategy=strategy)
+
+    def choose(self, question: str) -> RetrievalDecision:
+        """Return the scripted decision."""
+        return self.decision
+
+
+def test_one_prompt_cites_every_source_the_model_uses() -> None:
+    """Send every final chunk once and cite each excerpt the answer names."""
+    chat = FakeGenerator(
+        _answer("Emails need a joke, and a correction waits 30 minutes.", [1, 3]),
+    )
+
+    answer, citations = generate_answer(
+        "What are the joke and correction rules?",
+        [JOKE, LEAVE, GRACE],
+        generator=chat,
+    )
+
+    assert "joke" in answer
+    assert [citation.section for citation in citations] == ["3.1 Requirement", "6. Boss Error Grace Period"]
+    assert {citation.document for citation in citations} == {"HR Policy"}
+    assert len(chat.prompts) == 1
+    assert "Every email must begin or end with a joke." in chat.prompts[0]
+    assert "Employees receive 5 days of paid leave" in chat.prompts[0]
+    assert "Employees must wait 30 minutes" in chat.prompts[0]
+
+
+def test_refusal_uses_one_prompt_and_cites_nothing() -> None:
+    """Refuse unsupported questions without a citation after one prompt."""
+    chat = FakeGenerator('{"answerable": false, "answer": "", "sources": []}')
+    answer, citations = generate_answer(
+        "Does the company match retirement contributions?",
+        [JOKE, LEAVE, GRACE],
+        generator=chat,
+    )
+    assert answer == REFUSAL_ANSWER
+    assert citations == []
+    assert len(chat.prompts) == 1
+
+
+def test_named_source_must_support_the_numbers_in_the_answer() -> None:
+    """Refuse an answer whose number is absent from the excerpts it cites."""
+    chat = FakeGenerator(_answer("A correction waits 30 minutes.", [1]))
+    answer, citations = generate_answer(
+        "How long must I wait before correcting a boss?",
+        [JOKE, GRACE],
+        generator=chat,
+    )
+    assert answer == REFUSAL_ANSWER
+    assert citations == []
+
+
+def test_number_from_the_question_is_allowed_when_that_excerpt_is_cited() -> None:
+    """Allow a number that appears in the question when the supporting excerpt is cited."""
+    chat = FakeGenerator(_answer("Wait 30 minutes before the correction.", [2]))
+    answer, citations = generate_answer(
+        "How long is the 30 minute grace period?",
+        [JOKE, GRACE],
+        generator=chat,
+    )
+    assert citations[0].section == "6. Boss Error Grace Period"
+    assert "30" in answer
+
+
+def test_prompt_lists_every_final_excerpt() -> None:
+    """Put the instruction, question, and every chunk into the one prompt."""
+    prompt = build_prompt("What are the joke and leave rules?", [JOKE, LEAVE])
+    assert prompt == build_grounded_excerpt_prompt(
+        "What are the joke and leave rules?",
+        [
+            "\n".join(
+                [
+                    "Excerpt 1",
+                    "Document: HR Policy",
+                    "Version: 2.0",
+                    "Section: 3.1 Requirement",
+                    JOKE.text,
+                ]
+            ),
+            "\n".join(
+                [
+                    "Excerpt 2",
+                    "Document: HR Policy",
+                    "Version: 2.0",
+                    "Section: 5.1 Leave Entitlement",
+                    LEAVE.text,
+                ]
+            ),
+        ],
+    )
+    assert INSTRUCTION in prompt
+    assert "Question: What are the joke and leave rules?" in prompt
+
+
+def test_fenced_json_is_parsed_as_the_model_answer() -> None:
+    """Accept a JSON object wrapped in a markdown fence."""
+    chat = FakeGenerator(
+        '```json\n{"answerable": true, "answer": "Every email must include a joke.", "sources": [1]}\n```'
+    )
+    answer, citations = generate_answer("Does every company email have to include a joke?", [JOKE], generator=chat)
+    assert "joke" in answer
+    assert citations[0].section == "3.1 Requirement"
+
+
+def test_empty_retrieval_refuses_without_calling_the_model() -> None:
+    """Refuse immediately when retrieval returns no chunks."""
+
+    class ExplodingChat:
+        def complete(self, prompt: str) -> str:
+            """Fail if generation runs with no retrieved excerpts."""
+            raise AssertionError("model should not run without retrieved excerpts")
+
+    answer, citations = generate_answer(
+        "Does the company match retirement contributions?",
+        [],
+        generator=ExplodingChat(),
+    )
+    assert answer == REFUSAL_ANSWER
+    assert citations == []
+
+
+def test_unparseable_model_text_is_not_cited() -> None:
+    """Refuse when the model returns text that is not the expected JSON."""
+    chat = FakeGenerator("Every email must include a joke.")
+    answer, citations = generate_answer("Does every company email have to include a joke?", [JOKE], generator=chat)
+    assert answer == REFUSAL_ANSWER
+    assert citations == []
+
+
+def test_ask_returns_every_citation_and_the_strategy(tmp_path) -> None:
+    """Return each source the model used and the strategy chosen for the ask."""
+    store = _store(tmp_path)
+    chat = FakeGenerator(_answer("Every email must include a joke.", [1]))
+
+    response = ask(
+        "Does every company email have to include a joke?",
+        store=store,
+        embedder=FakeEmbedder(),
+        generator=chat,
+        router=ChoosingRouter("hybrid"),
+        reranker=KeepingReranker(),
+        audit_path=tmp_path / "audit.jsonl",
+    )
+
+    assert [citation.section for citation in response.citations] == ["3.1 Requirement"]
+    assert response.retrieval.strategy == "hybrid"
+    assert len(chat.prompts) == 1
+    assert "1. Meals" not in chat.prompts[0]
+
+
+def test_ask_refusal_keeps_the_retrieved_chunks(tmp_path) -> None:
+    """Return the refusal, no citations, and the retrieved excerpts."""
+    store = _store(tmp_path)
+    chat = FakeGenerator('{"answerable": false, "answer": "", "sources": []}')
+
+    response = ask(
+        "Does the company match retirement contributions?",
+        store=store,
+        embedder=FakeEmbedder(),
+        generator=chat,
+        router=FallbackRouter(),
+        reranker=KeepingReranker(),
+        audit_path=tmp_path / "audit.jsonl",
+    )
+
+    assert response.answer == REFUSAL_ANSWER
+    assert response.citations == []
+    assert response.retrieval.strategy == "vector"
+    assert {chunk.section for chunk in response.retrieved_chunks} == {
+        "3.1 Requirement",
+        "5.1 Leave Entitlement",
+        "6. Boss Error Grace Period",
+    }
+
+
+def test_ollama_chat_adapter_returns_message_text() -> None:
+    """Read the Ollama message body and return it as plain text."""
+
+    class RecordingClient:
+        def chat(self, model: str, messages: list, **kwargs):
+            """Return one scripted chat message and record the call."""
+            self.messages = messages
+            self.kwargs = kwargs
+            return SimpleNamespace(
+                message=SimpleNamespace(content='{"answerable": true, "answer": "joke", "sources": [1]}'),
+            )
+
+    client = RecordingClient()
+    text = OllamaChatAdapter(model="qwen3:8b", client=client).complete("Question: email")
+
+    assert text == '{"answerable": true, "answer": "joke", "sources": [1]}'
+    assert client.messages == [{"role": "user", "content": "Question: email"}]
+    assert client.kwargs["think"] is False
+    assert client.kwargs["options"] == {"temperature": CHAT_TEMPERATURE}
+    assert "answerable" in client.kwargs["format"]["properties"]
+    assert "sources" in client.kwargs["format"]["properties"]
+
+
+def test_ollama_chat_adapter_reads_a_dict_response() -> None:
+    """Read message text when the client returns a plain dictionary."""
+
+    class DictClient:
+        def chat(self, model: str, messages: list, **kwargs):
+            """Return one scripted dictionary response."""
+            return {"message": {"content": '{"answerable": false, "answer": "", "sources": []}'}}
+
+    text = OllamaChatAdapter(client=DictClient()).complete("Question: retirement")
+    assert text == '{"answerable": false, "answer": "", "sources": []}'
+
+
+def test_ollama_chat_adapter_rejects_an_empty_response() -> None:
+    """Reject a chat response that has no message text."""
+
+    class EmptyClient:
+        def chat(self, model: str, messages: list, **kwargs):
+            """Return a message with no content."""
+            return SimpleNamespace(message=SimpleNamespace(content=""))
+
+    with pytest.raises(ValueError, match="empty response"):
+        OllamaChatAdapter(client=EmptyClient()).complete("Question: email")
+
+
+def _store(tmp_path) -> ChromaPolicyStore:
+    """Store the three HR excerpts used by the ask tests."""
+    store = ChromaPolicyStore(tmp_path / "chroma")
+    store.upsert_chunks(
+        [_as_policy_chunk(JOKE), _as_policy_chunk(LEAVE), _as_policy_chunk(GRACE)],
+        [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]],
+    )
+    return store
 
 
 def _as_policy_chunk(chunk: RetrievedChunk) -> PolicyChunk:
@@ -93,290 +339,3 @@ def _as_policy_chunk(chunk: RetrievedChunk) -> PolicyChunk:
         section_title=chunk.section_title,
         text=chunk.text,
     )
-
-
-def _store_with_meals(tmp_path) -> ChromaPolicyStore:
-    """Create a store containing the meals, hotels, and deadline fixtures."""
-    store = ChromaPolicyStore(tmp_path / "chroma")
-    store.upsert_chunks(
-        [_as_policy_chunk(MEALS), _as_policy_chunk(HOTELS), _as_policy_chunk(DEADLINE)],
-        [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]],
-    )
-    return store
-
-
-def test_closest_chunk_answers_in_a_single_call() -> None:
-    """Cite the closest chunk when it alone answers the question."""
-    chat = FakeGenerator('{"answerable": true, "answer": "Employees may claim up to $65 per day for meals."}')
-
-    answer, citation = generate_answer(
-        "How much can I spend on food each day?",
-        [MEALS, HOTELS, DEADLINE],
-        generator=chat,
-    )
-
-    assert "$65" in answer
-    assert citation is not None
-    assert citation.document == "Employee Expense Policy"
-    assert citation.version == "2.0"
-    assert citation.section == "1. Meals"
-    # Only the closest chunk needed to be checked.
-    assert len(chat.prompts) == 1
-
-
-def test_falls_back_to_next_closest_chunk_when_first_cannot_answer() -> None:
-    """Use the next chunk when the closest one cannot answer."""
-    chat = FakeGenerator(
-        NOT_ANSWERABLE,
-        '{"answerable": true, "answer": "A manager must approve rates above $225 per night."}',
-    )
-
-    answer, citation = generate_answer(
-        "My hotel costs $250. What do I need?",
-        [MEALS, HOTELS, DEADLINE],
-        generator=chat,
-    )
-
-    assert "manager" in answer.lower()
-    assert citation is not None
-    assert citation.section == "2. Hotels"
-    # First (closest) chunk was tried and rejected before falling back.
-    assert len(chat.prompts) == 2
-    assert "1. Meals" in chat.prompts[0]
-    assert "2. Hotels" in chat.prompts[1]
-
-
-def test_unsupported_question_refuses_without_citation() -> None:
-    """Refuse without a citation when no chunk can answer."""
-    chat = FakeGenerator(NOT_ANSWERABLE)
-    answer, citation = generate_answer(
-        "Does the company reimburse professional conference tickets?",
-        [MEALS, HOTELS, DEADLINE],
-        generator=chat,
-    )
-    assert answer == REFUSAL_ANSWER
-    assert citation is None
-    # Every chunk was tried before refusing.
-    assert len(chat.prompts) == 3
-
-
-def test_gym_membership_is_an_unsupported_question_example() -> None:
-    """Refuse the gym-membership question when no excerpt supports it."""
-    chat = FakeGenerator(NOT_ANSWERABLE)
-    answer, citation = generate_answer(
-        "Does the company reimburse gym memberships?",
-        [MEALS, HOTELS, DEADLINE],
-        generator=chat,
-    )
-    assert answer == REFUSAL_ANSWER
-    assert citation is None
-    assert len(chat.prompts) == 3
-
-
-def test_fenced_json_is_parsed_as_the_model_answer() -> None:
-    """Accept a JSON object wrapped in a markdown fence."""
-    chat = FakeGenerator(
-        '```json\n{"answerable": true, "answer": "Employees may claim up to $65 per day for meals."}\n```'
-    )
-    answer, citation = generate_answer(
-        "How much can I spend on food each day?",
-        [MEALS],
-        generator=chat,
-    )
-    assert "$65" in answer
-    assert citation is not None
-    assert citation.section == "1. Meals"
-
-
-def test_answerable_flag_with_an_empty_answer_is_not_cited() -> None:
-    """Refuse a chunk the model marks answerable but leaves blank."""
-    chat = FakeGenerator('{"answerable": true, "answer": "   "}')
-    answer, citation = generate_answer(
-        "How much can I spend on food each day?",
-        [MEALS],
-        generator=chat,
-    )
-    assert answer == REFUSAL_ANSWER
-    assert citation is None
-
-
-def test_number_from_the_question_is_allowed_in_the_answer() -> None:
-    """Allow an amount that appears in the question even when the excerpt uses another amount."""
-    chat = FakeGenerator('{"answerable": true, "answer": "A manager must approve a hotel that costs $250."}')
-    answer, citation = generate_answer(
-        "My hotel costs $250. What do I need?",
-        [HOTELS],
-        generator=chat,
-    )
-    assert citation is not None
-    assert citation.section == "2. Hotels"
-    assert "$250" in answer
-
-
-def test_number_missing_from_excerpt_and_question_is_not_cited() -> None:
-    """Skip an answer that introduces a number present in neither the excerpt nor the question."""
-    chat = FakeGenerator('{"answerable": true, "answer": "You need approval from 9 managers."}')
-    answer, citation = generate_answer(
-        "My hotel costs $250. What do I need?",
-        [HOTELS],
-        generator=chat,
-    )
-    assert answer == REFUSAL_ANSWER
-    assert citation is None
-
-
-def test_prompt_quotes_only_the_selected_excerpt() -> None:
-    """Put the instruction, question, section label, and excerpt text in the prompt."""
-    prompt = build_prompt("How much can I spend on food each day?", MEALS)
-    assert prompt == build_grounded_excerpt_prompt(
-        "How much can I spend on food each day?",
-        "1. Meals",
-        MEALS.text,
-    )
-    assert INSTRUCTION in prompt
-    assert "Question: How much can I spend on food each day?" in prompt
-    assert "[Section 1. Meals]" in prompt
-    assert MEALS.text in prompt
-    assert "Hotels" not in prompt
-
-
-def test_unparseable_model_text_is_not_cited() -> None:
-    """Refuse when the model returns text that is not the expected JSON."""
-    chat = FakeGenerator("Employees may claim up to $65 per day for meals.")
-    answer, citation = generate_answer(
-        "How much can I spend on food each day?",
-        [MEALS],
-        generator=chat,
-    )
-    assert answer == REFUSAL_ANSWER
-    assert citation is None
-
-
-def test_answer_that_introduces_an_amount_is_not_cited() -> None:
-    """Skip a chunk whose answer uses an amount missing from the excerpt and question."""
-    chat = FakeGenerator(
-        '{"answerable": true, "answer": "Employees may claim up to $80 per day for meals."}',
-        '{"answerable": true, "answer": "A manager must approve rates above $225 per night."}',
-    )
-
-    answer, citation = generate_answer(
-        "How much can I spend on food each day?",
-        [MEALS, HOTELS],
-        generator=chat,
-    )
-
-    assert citation is not None
-    assert citation.section == "2. Hotels"
-    assert "$225" in answer
-    assert len(chat.prompts) == 2
-
-
-def test_empty_retrieval_refuses_without_calling_the_model() -> None:
-    """Refuse immediately when retrieval returns no chunks."""
-
-    class ExplodingChat:
-        def complete(self, prompt: str) -> str:
-            """Fail if generation runs with no retrieved excerpts."""
-            raise AssertionError("model should not run without retrieved excerpts")
-
-    answer, citation = generate_answer(
-        "Does the company reimburse gym memberships?",
-        [],
-        generator=ExplodingChat(),
-    )
-    assert answer == REFUSAL_ANSWER
-    assert citation is None
-
-
-def test_ask_builds_structured_response_from_retrieval_not_the_model(tmp_path) -> None:
-    """Build the cited response from retrieved chunks, not from the model JSON."""
-    store = _store_with_meals(tmp_path)
-    chat = FakeGenerator('{"answerable": true, "answer": "Employees may claim up to $65 per day for meals."}')
-
-    response = ask(
-        "How much can I spend on food each day?",
-        store=store,
-        embedder=FakeEmbedder(),
-        generator=chat,
-        router=FallbackRouter(),
-        reranker=KeepingReranker(),
-        audit_path=tmp_path / "audit.jsonl",
-    )
-
-    assert response.citation is not None
-    assert response.citation.section == "1. Meals"
-    assert len(response.retrieved_chunks) <= 3
-    assert response.retrieved_chunks == sorted(response.retrieved_chunks, key=lambda chunk: chunk.distance)
-    assert all(isinstance(chunk.distance, float) for chunk in response.retrieved_chunks)
-    assert "1. Meals" in {chunk.section for chunk in response.retrieved_chunks}
-
-
-def test_ask_refusal_keeps_the_retrieved_chunks(tmp_path) -> None:
-    """Return the refusal and the retrieved excerpts when no chunk can answer."""
-    store = _store_with_meals(tmp_path)
-    chat = FakeGenerator(NOT_ANSWERABLE)
-
-    response = ask(
-        "Does the company reimburse gym memberships?",
-        store=store,
-        embedder=FakeEmbedder(),
-        generator=chat,
-        router=FallbackRouter(),
-        reranker=KeepingReranker(),
-        audit_path=tmp_path / "audit.jsonl",
-    )
-
-    assert response.answer == REFUSAL_ANSWER
-    assert response.citation is None
-    assert [chunk.section for chunk in response.retrieved_chunks][0] == "1. Meals"
-    assert {chunk.section for chunk in response.retrieved_chunks} == {
-        "1. Meals",
-        "2. Hotels",
-        "6. Submission Deadline",
-    }
-    distances = [chunk.distance for chunk in response.retrieved_chunks]
-    assert distances == sorted(distances)
-
-
-def test_ollama_chat_adapter_returns_message_text() -> None:
-    """Read the Ollama message body and return it as plain text."""
-
-    class RecordingClient:
-        def chat(self, model: str, messages: list, **kwargs):
-            """Return one scripted chat message and record the call."""
-            self.messages = messages
-            self.kwargs = kwargs
-            return SimpleNamespace(message=SimpleNamespace(content='{"answerable": true, "answer": "$65"}'))
-
-    client = RecordingClient()
-    text = OllamaChatAdapter(model="qwen3:8b", client=client).complete("Question: meals")
-
-    assert text == '{"answerable": true, "answer": "$65"}'
-    assert client.messages == [{"role": "user", "content": "Question: meals"}]
-    assert client.kwargs["think"] is False
-    assert client.kwargs["options"] == {"temperature": CHAT_TEMPERATURE}
-    assert "answerable" in client.kwargs["format"]["properties"]
-
-
-def test_ollama_chat_adapter_reads_a_dict_response() -> None:
-    """Read message text when the client returns a plain dictionary."""
-
-    class DictClient:
-        def chat(self, model: str, messages: list, **kwargs):
-            """Return one scripted dictionary response."""
-            return {"message": {"content": '{"answerable": false, "answer": ""}'}}
-
-    text = OllamaChatAdapter(client=DictClient()).complete("Question: gym")
-    assert text == '{"answerable": false, "answer": ""}'
-
-
-def test_ollama_chat_adapter_rejects_an_empty_response() -> None:
-    """Reject a chat response that has no message text."""
-
-    class EmptyClient:
-        def chat(self, model: str, messages: list, **kwargs):
-            """Return a message with no content."""
-            return SimpleNamespace(message=SimpleNamespace(content=""))
-
-    with pytest.raises(ValueError, match="empty response"):
-        OllamaChatAdapter(client=EmptyClient()).complete("Question: meals")
