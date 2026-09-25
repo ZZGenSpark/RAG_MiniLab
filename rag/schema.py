@@ -138,6 +138,8 @@ class RetrievedChunkRef(BaseModel):
 
     section: str = Field(min_length=1)
     distance: float
+    document: str = ""
+    version: str = ""
 
 
 class RetrievedChunk(PolicyChunk):
@@ -147,7 +149,12 @@ class RetrievedChunk(PolicyChunk):
 
     def to_ref(self) -> RetrievedChunkRef:
         """Return the section label and distance for an ask response."""
-        return RetrievedChunkRef(section=self.citation_section, distance=self.distance)
+        return RetrievedChunkRef(
+            section=self.citation_section,
+            distance=self.distance,
+            document=self.document,
+            version=self.version,
+        )
 
 
 REFUSAL_ANSWER = "The provided policy does not answer this question."

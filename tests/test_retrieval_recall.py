@@ -1,4 +1,4 @@
-"""Measure retrieval recall on the indexed policies. Answer markers are not checked."""
+"""Measure retrieval recall on the indexed policies."""
 
 from collections.abc import Sequence
 

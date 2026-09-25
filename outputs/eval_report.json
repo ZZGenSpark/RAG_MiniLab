@@ -1,0 +1,325 @@
+{
+  "results": [
+    {
+      "question": "What happens to food left in the shared refrigerator over the weekend?",
+      "response": {
+        "answer": "Food left in the shared refrigerator over the weekend will be treated as abandoned. Facilities will identify the responsible employee via the fridge log, and that employee will be required to eat at least one spoonful of the food, in whatever state it has reached, before it is disposed of.",
+        "citations": [
+          {
+            "document": "HR Policy",
+            "version": "2.0",
+            "section": "7.3 Weekend Abandonment Consequence"
+          }
+        ],
+        "retrieved_chunks": [
+          {
+            "section": "7.3 Weekend Abandonment Consequence",
+            "distance": 0.244176983833313,
+            "document": "HR Policy",
+            "version": "2.0"
+          },
+          {
+            "section": "7.1 Ownership",
+            "distance": 0.49027490615844727,
+            "document": "HR Policy",
+            "version": "2.0"
+          },
+          {
+            "section": "1. Purpose",
+            "distance": 0.5628005862236023,
+            "document": "HR Policy",
+            "version": "2.0"
+          }
+        ],
+        "retrieval": {
+          "strategy": "vector"
+        },
+        "source_conflicts": []
+      }
+    },
+    {
+      "question": "How long can an employee play foosball each day?",
+      "response": {
+        "answer": "An employee can play foosball for up to 20 minutes each day, split across no more than two sessions.",
+        "citations": [
+          {
+            "document": "Time & Usage Policy",
+            "version": "2.0",
+            "section": "4.1 Daily Allowance"
+          },
+          {
+            "document": "Time & Usage Policy",
+            "version": "1.0",
+            "section": "4.1 Daily Allowance"
+          }
+        ],
+        "retrieved_chunks": [
+          {
+            "section": "4.1 Daily Allowance",
+            "distance": 0.2824999690055847,
+            "document": "Time & Usage Policy",
+            "version": "1.0"
+          },
+          {
+            "section": "4.1 Daily Allowance",
+            "distance": 0.31171268224716187,
+            "document": "Time & Usage Policy",
+            "version": "2.0"
+          },
+          {
+            "section": "3.1 Daily Allowance",
+            "distance": 0.42130208015441895,
+            "document": "Time & Usage Policy",
+            "version": "1.0"
+          }
+        ],
+        "retrieval": {
+          "strategy": "vector"
+        },
+        "source_conflicts": [
+          {
+            "document": "Time & Usage Policy",
+            "versions": [
+              "1.0",
+              "2.0"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "question": "Does the company match retirement contributions?",
+      "response": {
+        "answer": "The provided policy does not answer this question.",
+        "citations": [],
+        "retrieved_chunks": [
+          {
+            "section": "2. Scope",
+            "distance": 0.7000615000724792,
+            "document": "Time & Usage Policy",
+            "version": "2.0"
+          },
+          {
+            "section": "2. Scope",
+            "distance": 0.7038784027099609,
+            "document": "Time & Usage Policy",
+            "version": "1.0"
+          },
+          {
+            "section": "6.1 Allocation Amount",
+            "distance": 0.7664086222648621,
+            "document": "Time & Usage Policy",
+            "version": "2.0"
+          }
+        ],
+        "retrieval": {
+          "strategy": "vector"
+        },
+        "source_conflicts": [
+          {
+            "document": "Time & Usage Policy",
+            "versions": [
+              "1.0",
+              "2.0"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "question": "Does every company email have to include a joke?",
+      "response": {
+        "answer": "Yes, every company email must include a joke according to the policy excerpts.",
+        "citations": [
+          {
+            "document": "HR Policy",
+            "version": "2.0",
+            "section": "3.1 Requirement"
+          },
+          {
+            "document": "HR Policy",
+            "version": "2.0",
+            "section": "3.2 Monitoring"
+          },
+          {
+            "document": "HR Policy",
+            "version": "2.0",
+            "section": "2. Scope"
+          }
+        ],
+        "retrieved_chunks": [
+          {
+            "section": "3.1 Requirement",
+            "distance": 0.22389346361160278,
+            "document": "HR Policy",
+            "version": "2.0"
+          },
+          {
+            "section": "2. Scope",
+            "distance": 0.41283726692199707,
+            "document": "HR Policy",
+            "version": "2.0"
+          },
+          {
+            "section": "3.2 Monitoring",
+            "distance": 0.42036527395248413,
+            "document": "HR Policy",
+            "version": "2.0"
+          }
+        ],
+        "retrieval": {
+          "strategy": "vector"
+        },
+        "source_conflicts": []
+      }
+    },
+    {
+      "question": "How long must I wait before correcting a boss who is wrong?",
+      "response": {
+        "answer": "You must wait a minimum of 30 minutes before correcting a boss who is wrong.",
+        "citations": [
+          {
+            "document": "HR Policy",
+            "version": "2.0",
+            "section": "6. Boss Error Grace Period"
+          }
+        ],
+        "retrieved_chunks": [
+          {
+            "section": "6. Boss Error Grace Period",
+            "distance": 0.3404715061187744,
+            "document": "HR Policy",
+            "version": "2.0"
+          },
+          {
+            "section": "8. Enforcement and Culture",
+            "distance": 0.7290602922439575,
+            "document": "HR Policy",
+            "version": "2.0"
+          },
+          {
+            "section": "3.1 Standard Procedure",
+            "distance": 0.7743383646011353,
+            "document": "Preparedness Policy",
+            "version": "2.0"
+          }
+        ],
+        "retrieval": {
+          "strategy": "vector"
+        },
+        "source_conflicts": []
+      }
+    },
+    {
+      "question": "How often are employees expected to work out?",
+      "response": {
+        "answer": "Employees are expected to work out a minimum of three structured training sessions per week, each at least 45 minutes long.",
+        "citations": [
+          {
+            "document": "Health & Wellness Policy",
+            "version": "1.0",
+            "section": "3.1 Minimum Requirement"
+          }
+        ],
+        "retrieved_chunks": [
+          {
+            "section": "3.1 Minimum Requirement",
+            "distance": 0.3708815574645996,
+            "document": "Health & Wellness Policy",
+            "version": "1.0"
+          },
+          {
+            "section": "4.3 Adjusting for Training Intensity",
+            "distance": 0.49830448627471924,
+            "document": "Health & Wellness Policy",
+            "version": "1.0"
+          },
+          {
+            "section": "1. Purpose",
+            "distance": 0.5562652945518494,
+            "document": "Health & Wellness Policy",
+            "version": "1.0"
+          }
+        ],
+        "retrieval": {
+          "strategy": "vector"
+        },
+        "source_conflicts": []
+      }
+    },
+    {
+      "question": "How long do employees stay indoors after a nuclear event?",
+      "response": {
+        "answer": "Employees must remain indoors, away from windows, for a minimum of two weeks following any nuclear event.",
+        "citations": [
+          {
+            "document": "Preparedness Policy",
+            "version": "2.0",
+            "section": "4.3 Duration of Sheltering"
+          }
+        ],
+        "retrieved_chunks": [
+          {
+            "section": "4.3 Duration of Sheltering",
+            "distance": 0.2292361855506897,
+            "document": "Preparedness Policy",
+            "version": "2.0"
+          },
+          {
+            "section": "4.1 Shelter Location",
+            "distance": 0.42518627643585205,
+            "document": "Preparedness Policy",
+            "version": "2.0"
+          },
+          {
+            "section": "5.2 Duration and Exceptions",
+            "distance": 0.520313024520874,
+            "document": "Preparedness Policy",
+            "version": "2.0"
+          }
+        ],
+        "retrieval": {
+          "strategy": "vector"
+        },
+        "source_conflicts": []
+      }
+    },
+    {
+      "question": "How much paid time off do I get when I adopt a pet?",
+      "response": {
+        "answer": "When you adopt a pet, you are entitled to 5 days of paid time off, which is extended to 7 days if the pet adopted is a dog.",
+        "citations": [
+          {
+            "document": "HR Policy",
+            "version": "2.0",
+            "section": "5.1 Leave Entitlement"
+          }
+        ],
+        "retrieved_chunks": [
+          {
+            "section": "5.1 Leave Entitlement",
+            "distance": 0.2130257487297058,
+            "document": "HR Policy",
+            "version": "2.0"
+          },
+          {
+            "section": "5.2 Conditions",
+            "distance": 0.3735666871070862,
+            "document": "HR Policy",
+            "version": "2.0"
+          },
+          {
+            "section": "4.1 Daily Allowance",
+            "distance": 0.8088623285293579,
+            "document": "Time & Usage Policy",
+            "version": "1.0"
+          }
+        ],
+        "retrieval": {
+          "strategy": "vector"
+        },
+        "source_conflicts": []
+      }
+    }
+  ]
+}

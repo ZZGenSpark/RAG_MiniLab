@@ -1,7 +1,7 @@
-"""Run policy questions and score retrieval recall.
+"""Score retrieval recall and answer accuracy for the eight policy questions.
 
-Answer markers are recorded on each case. Recall checks section labels only.
-Answer-marker checks are added once generation exists.
+Recall checks section labels. Accuracy checks that every answer marker is present.
+CI runs the questions with a fake generator. The CLI writes a live Ollama report.
 """
 
 from __future__ import annotations
@@ -16,13 +16,17 @@ from pydantic import BaseModel, ConfigDict
 from adapter.chroma_store import ChromaPolicyStore
 from adapter.ollama_chat import OllamaChatAdapter
 from adapter.ollama_embeddings import OllamaEmbeddingAdapter
-from config import CHROMA_PATH, EVAL_OUTPUT_PATH
+from config import CHROMA_PATH, EVAL_OUTPUT_PATH, EVAL_REPORT_PATH
 from rag.ask import ask
+from rag.embeddings import Embedder
+from rag.generate import Generator
+from rag.rerank import Reranker
+from rag.route import Router
 from rag.schema import REFUSAL_ANSWER, AskResponse, RetrievedChunk
 from rag.store import PolicyStore
 
 
-def answer_matches(case: RequiredCase, answer: str) -> bool:
+def answer_matches(case: RequiredCase | RetrievalCase, answer: str) -> bool:
     """Return whether every expected marker appears in the answer."""
     text = answer.lower()
     return all(marker.lower() in text for marker in case.answer_markers)
@@ -178,6 +182,124 @@ def retrieval_recall(pairs: Sequence[tuple[RetrievalCase, Sequence[RetrievedChun
     return hits / len(labeled)
 
 
+def answer_accuracy(pairs: Sequence[tuple[RetrievalCase, str]]) -> float:
+    """Return the fraction of cases whose answers contain every marker."""
+    if not pairs:
+        return 0.0
+    hits = sum(1 for case, answer in pairs if answer_matches(case, answer))
+    return hits / len(pairs)
+
+
+class EvalResult(BaseModel):
+    """One saved ask for an evaluation question."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    question: str
+    response: AskResponse
+
+
+class EvalReport(BaseModel):
+    """Saved answers that can be scored without calling a model again."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    results: list[EvalResult]
+
+
+class EvalScores(BaseModel):
+    """Recall and accuracy computed from a saved report."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    recall: float
+    accuracy: float
+
+
+def response_recalls(case: RetrievalCase, response: AskResponse) -> bool:
+    """Return whether the saved chunks include every expected document version and section."""
+    return all(
+        any(
+            chunk.document == label.document and chunk.version == label.version and chunk.section == label.section
+            for chunk in response.retrieved_chunks
+        )
+        for label in case.expected_labels
+    )
+
+
+def score_eval_report(report: EvalReport) -> EvalScores:
+    """Score recall and accuracy from saved answers. This does not call a model."""
+    pairs = [(case_for_question(result.question), result.response) for result in report.results]
+    labeled = [(case, response) for case, response in pairs if case.expected_labels]
+    hits = sum(1 for case, response in labeled if response_recalls(case, response))
+    recall = 0.0 if not labeled else hits / len(labeled)
+    accuracy = answer_accuracy([(case, response.answer) for case, response in pairs])
+    return EvalScores(recall=recall, accuracy=accuracy)
+
+
+def case_for_question(question: str) -> RetrievalCase:
+    """Return the evaluation case for one saved question."""
+    for case in RETRIEVAL_CASES:
+        if case.question == question:
+            return case
+    raise KeyError(question)
+
+
+def run_eval(
+    *,
+    store: PolicyStore,
+    embedder: Embedder,
+    generator: Generator,
+    router: Router | None = None,
+    reranker: Reranker | None = None,
+    audit_path: Path | None = None,
+) -> EvalReport:
+    """Ask each of the eight questions and keep the responses for scoring."""
+    results = []
+    for case in RETRIEVAL_CASES:
+        response = ask(
+            case.question,
+            store=store,
+            embedder=embedder,
+            generator=generator,
+            router=router,
+            reranker=reranker,
+            audit_path=audit_path,
+        )
+        results.append(EvalResult(question=case.question, response=response))
+    return EvalReport(results=results)
+
+
+def write_eval_report(
+    path: str | Path = EVAL_REPORT_PATH,
+    *,
+    store: PolicyStore,
+    embedder: Embedder,
+    generator: Generator,
+    router: Router | None = None,
+    reranker: Reranker | None = None,
+    audit_path: Path | None = None,
+) -> Path:
+    """Run the eight questions and write the report JSON."""
+    output_path = Path(path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    report = run_eval(
+        store=store,
+        embedder=embedder,
+        generator=generator,
+        router=router,
+        reranker=reranker,
+        audit_path=audit_path,
+    )
+    output_path.write_text(report.model_dump_json(indent=2) + "\n", encoding="utf-8")
+    return output_path
+
+
+def load_eval_report(path: str | Path = EVAL_REPORT_PATH) -> EvalReport:
+    """Load a saved evaluation report."""
+    return EvalReport.model_validate_json(Path(path).read_text(encoding="utf-8"))
+
+
 def run_required_questions(store: PolicyStore | None = None) -> list[dict]:
     """Ask each required question and return the raw result rows."""
     policy_store = store or ChromaPolicyStore(CHROMA_PATH)
@@ -224,13 +346,15 @@ def response_from_result(result: dict) -> AskResponse:
 
 
 def main() -> None:
-    """Parse CLI arguments and write the required-question results."""
-    parser = argparse.ArgumentParser(description="Run the six required questions and save JSON output.")
+    """Ask the eight questions with Ollama and write outputs/eval_report.json."""
+    from adapter.sentence_transformer_embeddings import SentenceTransformerEmbeddingAdapter
+
+    parser = argparse.ArgumentParser(description="Run the eight evaluation questions and save the report.")
     parser.add_argument(
         "--output",
         type=Path,
-        default=EVAL_OUTPUT_PATH,
-        help="Path to write the saved results.",
+        default=EVAL_REPORT_PATH,
+        help="Path to write the evaluation report.",
     )
     parser.add_argument(
         "--chroma-path",
@@ -240,7 +364,12 @@ def main() -> None:
     )
     args = parser.parse_args()
     store = ChromaPolicyStore(args.chroma_path or CHROMA_PATH)
-    path = write_required_questions(args.output, store=store)
+    path = write_eval_report(
+        args.output,
+        store=store,
+        embedder=SentenceTransformerEmbeddingAdapter(),
+        generator=OllamaChatAdapter(),
+    )
     print(f"Wrote {path}")
 
 

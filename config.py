@@ -28,6 +28,7 @@ INGEST_SOURCES = (
 )
 CHROMA_PATH = Path(os.getenv("CHROMA_PATH", REPO_ROOT / "chroma_db"))
 EVAL_OUTPUT_PATH = REPO_ROOT / "outputs" / "required_questions.json"
+EVAL_REPORT_PATH = REPO_ROOT / "outputs" / "eval_report.json"
 AUDIT_PATH = REPO_ROOT / "outputs" / "audit.jsonl"
 
 # Ollama. Tags name one release. Unqualified names follow latest.
