@@ -17,6 +17,21 @@ from rag.schema import (
 )
 
 
+def test_numbered_rule_chunk_id_keeps_the_rule_number() -> None:
+    """Accept a 7.3 id and cite the rule without turning the parent into the label."""
+    chunk = PolicyChunk(
+        chunk_id="hr-policy:v2.0:section-7.3",
+        document="HR Policy",
+        version="2.0",
+        section="7.3",
+        section_title="Weekend Abandonment Consequence",
+        parent_heading="7. Shared Refrigerator Policy",
+        text="7. Shared Refrigerator Policy\n\nFood left in the shared refrigerator is discarded.",
+    )
+    assert chunk.citation_section == "7.3 Weekend Abandonment Consequence"
+    assert chunk.to_metadata().parent_heading == "7. Shared Refrigerator Policy"
+
+
 def test_policy_chunk_rejects_unstable_chunk_id() -> None:
     """Reject a chunk id that does not encode version and section."""
     with pytest.raises(ValidationError, match="chunk_id"):
@@ -190,6 +205,7 @@ def test_as_upsert_serializes_metadata_as_dicts() -> None:
             "version": "2.0",
             "section": "1",
             "section_title": "Meals",
+            "parent_heading": "",
         }
     ]
 

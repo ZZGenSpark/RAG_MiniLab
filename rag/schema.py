@@ -23,12 +23,19 @@ class ChunkMetadata(BaseModel):
 
     document: str = Field(min_length=1)
     version: str = Field(pattern=rf"^{VERSION_PATTERN}$")
-    section: str = Field(pattern=r"^\d+$")
+    section: str = Field(pattern=r"^\d+(?:\.\d+)?$")
     section_title: str = Field(min_length=1)
+    parent_heading: str = ""
 
     @property
     def citation_section(self) -> str:
-        """Return the numbered section label used in citations."""
+        """Return the numbered section label used in citations.
+
+        A parent section is `6. Boss Error Grace Period`. A numbered rule is
+        `7.3 Weekend Abandonment Consequence`.
+        """
+        if "." in self.section:
+            return f"{self.section} {self.section_title}"
         return f"{self.section}. {self.section_title}"
 
 
@@ -56,6 +63,7 @@ class PolicyChunk(ChunkMetadata):
             version=self.version,
             section=self.section,
             section_title=self.section_title,
+            parent_heading=self.parent_heading,
         )
 
 
@@ -121,7 +129,7 @@ class Citation(BaseModel):
 
     document: str = Field(min_length=1)
     version: str = Field(pattern=rf"^{VERSION_PATTERN}$")
-    section: str = Field(min_length=1, pattern=r"^\d+\.\s+.+$")
+    section: str = Field(min_length=1, pattern=r"^(?:\d+\.\s+|\d+\.\d+\s+).+$")
 
 
 class RetrievedChunkRef(BaseModel):

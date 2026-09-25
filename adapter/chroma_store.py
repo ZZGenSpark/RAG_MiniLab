@@ -142,7 +142,7 @@ class ChromaPolicyStore:
                     embedding=embedding,
                 )
             )
-        records.sort(key=lambda record: int(record.section))
+        records.sort(key=lambda record: _section_order(record.section))
         return records
 
     def _stored_embedding_width(self) -> int | None:
@@ -154,6 +154,11 @@ class ChromaPolicyStore:
         if embeddings is None or len(embeddings) == 0 or embeddings[0] is None:
             return None
         return len(list(embeddings[0]))
+
+
+def _section_order(section: str) -> tuple[int, ...]:
+    """Order `7` before `7.3` and `7.3` before `8`."""
+    return tuple(int(part) for part in section.split("."))
 
 
 def _first_query_row(value) -> list:

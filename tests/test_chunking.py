@@ -2,6 +2,7 @@
 
 import pytest
 
+from config import POLICIES_DIR
 from rag.chunking import chunk_id_for, chunk_policy, chunk_policy_file
 from rag.schema import PolicyChunk
 from tests.support import EXPENSE_POLICY_FIXTURE
@@ -131,6 +132,43 @@ def test_missing_title_is_rejected() -> None:
 def test_chunk_id_encodes_the_document_slug_version_and_section() -> None:
     """Keep the chunk id tied to the document slug, version, and section number."""
     assert chunk_id_for("Employee Expense Policy", "2.0", "5") == "employee-expense-policy:v2.0:section-5"
+
+
+def test_deepest_numbered_rule_is_a_chunk_and_its_parent_is_not() -> None:
+    """Keep section 7.3, prefix it with the parent heading, and do not chunk section 7."""
+    chunks = chunk_policy_file(POLICIES_DIR / "hr-policy-v2.0.md")
+    weekend = next(chunk for chunk in chunks if chunk.section == "7.3")
+
+    assert weekend.chunk_id == "hr-policy:v2.0:section-7.3"
+    assert weekend.section_title == "Weekend Abandonment Consequence"
+    assert weekend.parent_heading == "7. Shared Refrigerator Policy"
+    assert weekend.citation_section == "7.3 Weekend Abandonment Consequence"
+    assert weekend.text.startswith("7. Shared Refrigerator Policy\n\nFood left in the shared refrigerator")
+    assert not any(chunk.section == "7" for chunk in chunks)
+
+    grace = next(chunk for chunk in chunks if chunk.section == "6")
+    assert grace.chunk_id == "hr-policy:v2.0:section-6"
+    assert grace.parent_heading == ""
+    assert grace.text.startswith("When a manager or executive states something incorrect")
+    assert "6. Boss Error Grace Period" not in grace.text
+
+
+def test_sibling_rules_do_not_share_body_text() -> None:
+    """Keep overlap at zero between numbered rules under the same parent."""
+    markdown = (
+        "# HR Policy — Version 2.0\n\n"
+        "## 7. Shared Refrigerator Policy\n\n"
+        "### 7.1 Ownership\n\n"
+        "No food kept in the shared refrigerator belongs to any individual employee.\n\n"
+        "### 7.3 Weekend Abandonment Consequence\n\n"
+        "Food left in the shared refrigerator over a weekend will be treated as abandoned.\n"
+    )
+    chunks = chunk_policy(markdown)
+    assert [chunk.section for chunk in chunks] == ["7.1", "7.3"]
+    assert "individual employee" not in chunks[1].text
+    assert "treated as abandoned" not in chunks[0].text
+    assert chunks[0].text.startswith("7. Shared Refrigerator Policy\n\n")
+    assert chunks[1].chunk_id == "hr-policy:v2.0:section-7.3"
 
 
 def test_chunk_id_keeps_different_documents_from_colliding() -> None:

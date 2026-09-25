@@ -10,6 +10,7 @@ from rag.chunking import chunk_policy_file
 from rag.schema import (
     DISTANCE_SPACE,
     REQUIRED_METADATA_KEYS,
+    PolicyChunk,
     to_chroma_records,
 )
 from tests.support import EXPENSE_POLICY_FIXTURE
@@ -20,6 +21,18 @@ EMBEDDING_DIM = 8
 def _chunks():
     """Load the six chunks from the policy file."""
     return chunk_policy_file(EXPENSE_POLICY_FIXTURE)
+
+
+def _rule_chunk(section: str, title: str, text: str) -> PolicyChunk:
+    """Build one HR chunk whose id follows the document slug."""
+    return PolicyChunk(
+        chunk_id=f"hr-policy:v2.0:section-{section}",
+        document="HR Policy",
+        version="2.0",
+        section=section,
+        section_title=title,
+        text=text,
+    )
 
 
 def _embeddings(count: int, dim: int = EMBEDDING_DIM):
@@ -123,6 +136,18 @@ def test_get_all_sorts_by_section_number(tmp_path: Path) -> None:
     store = ChromaPolicyStore(tmp_path / "chroma")
     store.upsert_chunks(reversed_chunks, _embeddings(len(reversed_chunks)))
     assert [record.section for record in store.get_all()] == ["1", "2", "3", "4", "5", "6"]
+
+
+def test_get_all_orders_a_numbered_rule_between_neighboring_sections(tmp_path: Path) -> None:
+    """Sort 7.3 after section 7 and before section 8."""
+    chunks = [
+        _rule_chunk("8", "Enforcement", "Repeated violations may be escalated."),
+        _rule_chunk("7.3", "Weekend Abandonment Consequence", "Food left over a weekend is abandoned."),
+        _rule_chunk("7", "Shared Refrigerator Policy", "No stored food belongs to one employee."),
+    ]
+    store = ChromaPolicyStore(tmp_path / "chroma")
+    store.upsert_chunks(chunks, _embeddings(len(chunks)))
+    assert [record.section for record in store.get_all()] == ["7", "7.3", "8"]
 
 
 def test_query_can_return_every_stored_chunk(tmp_path: Path) -> None:
