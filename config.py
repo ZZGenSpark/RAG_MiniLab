@@ -54,3 +54,11 @@ TOP_K = 3
 # Chroma collection. The lab corpus lives in company_policies.
 COLLECTION_NAME = "company_policies"
 DISTANCE_SPACE = "cosine"
+
+
+def typesafe_api_key() -> str:
+    """Return the TypeSafe API key, or an empty string when it is unset.
+
+    An empty value selects the section-code fallback instead of Jev.
+    """
+    return os.getenv("TYPESAFE_API_KEY", "").strip()

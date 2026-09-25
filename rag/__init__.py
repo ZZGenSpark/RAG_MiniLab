@@ -10,6 +10,7 @@ from rag.embeddings import Embedder
 from rag.generate import generate_answer
 from rag.ingest import ingest_corpus, ingest_policy
 from rag.retrieve import retrieve
+from rag.route import RetrievalDecision, route
 from rag.schema import (
     DISTANCE_SPACE,
     REFUSAL_ANSWER,
@@ -32,6 +33,7 @@ __all__ = [
     "PolicyChunk",
     "PolicyStore",
     "REFUSAL_ANSWER",
+    "RetrievalDecision",
     "RetrievedChunk",
     "RetrievedChunkRef",
     "ask",
@@ -41,4 +43,5 @@ __all__ = [
     "ingest_corpus",
     "ingest_policy",
     "retrieve",
+    "route",
 ]
