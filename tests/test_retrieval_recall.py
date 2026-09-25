@@ -1,15 +1,11 @@
 """Measure retrieval recall on the indexed policies."""
 
-from collections.abc import Sequence
-
 import pytest
 
 from adapter.chroma_store import ChromaPolicyStore
 from adapter.sentence_transformer_embeddings import SentenceTransformerEmbeddingAdapter
-from rag.eval import RETRIEVAL_CASES, RetrievalCase, retrieval_recall
+from rag.eval import RETRIEVAL_CASES, RetrievalCase, evaluate_retrieval, retrieval_recall
 from rag.ingest import ingest_corpus
-from rag.retrieve import retrieve
-from rag.route import fallback_decision
 from rag.schema import RetrievedChunk
 
 
@@ -62,35 +58,14 @@ def test_indexed_policies_recall_every_expected_section(
 ) -> None:
     """Retrieve each question with the section-code router and require every expected label."""
     store, embedder = indexed_policies
-    pairs: list[tuple[RetrievalCase, Sequence[RetrievedChunk]]] = []
-    misses: list[str] = []
-    for case in RETRIEVAL_CASES:
-        hits = retrieve(
-            case.question,
-            store=store,
-            embedder=embedder,
-            decision=fallback_decision(case.question),
-        )
-        pairs.append((case, hits))
-        if not case.expected_labels:
-            assert hits
-            continue
-        missing = [
-            f"{label.document} v{label.version} {label.section}"
-            for label in case.expected_labels
-            if not any(
-                hit.document == label.document
-                and hit.version == label.version
-                and hit.citation_section == label.section
-                for hit in hits
-            )
-        ]
-        if missing:
-            found = [f"{hit.document} v{hit.version} {hit.citation_section}" for hit in hits]
-            misses.append(f"{case.question}\n  missing: {missing}\n  retrieved: {found}")
-
+    report = evaluate_retrieval(store=store, embedder=embedder)
+    misses = [
+        f"{result.question}\n  missing: {result.missing}\n  retrieved: {result.retrieved}"
+        for result in report.results
+        if result.missing or not result.retrieved
+    ]
     assert not misses, "\n".join(misses)
-    assert retrieval_recall(pairs) == 1.0
+    assert report.recall == 1.0
 
 
 def _hit(document: str, version: str, section: str, minor: str, title: str) -> RetrievedChunk:

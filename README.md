@@ -43,10 +43,13 @@ ruff check .
 ruff format --check .
 mypy
 pytest
+python -m rag.eval --retrieval-only
 python -m rag.eval
 ```
 
-GitHub Actions runs ruff, mypy, and pytest on Python 3.12. That job does not call Ollama or TypeSafe. `pytest` covers chunking, Chroma storage, hybrid retrieval, reranking, grounded generation, and retrieval recall. `python -m rag.eval` writes `outputs/eval_report.json`.
+GitHub Actions has two jobs on Python 3.12. `check` runs ruff, mypy, pytest, and `python -m rag.eval --retrieval-only`. That job does not call Ollama or TypeSafe. The retrieval command ingests the policies with MiniLM, retrieves every evaluation question with the section-code router and the cross-encoder, and fails if recall is below 1 or a question returns no chunks. It writes `outputs/retrieval_eval.json`. `pytest` covers the same recall check, plus chunking, Chroma storage, hybrid retrieval, reranking, and grounded generation.
+
+`eval` starts after `check` passes. It installs Ollama, pulls `qwen3:8b-q4_K_M`, ingests the policies, and runs `python -m rag.eval`. That command asks Ollama, writes `outputs/eval_report.json`, and fails unless recall and answer accuracy are both 1.0. The first `eval` run is slow because it downloads the chat model; later runs restore `~/.ollama/models` from cache. Local `python -m rag.eval` uses an already-ingested Chroma directory and applies the same score gate.
 
 ## Chroma persistence
 

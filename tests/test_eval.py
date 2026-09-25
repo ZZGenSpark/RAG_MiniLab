@@ -1,28 +1,40 @@
 """Check scoring helpers for saved evaluation results."""
 
 import json
+import re
 from collections.abc import Sequence
 from pathlib import Path
+from typing import cast
 
 import pytest
 
 from adapter.chroma_store import ChromaPolicyStore
 from adapter.sentence_transformer_embeddings import SentenceTransformerEmbeddingAdapter
+from rag.embeddings import Embedder
 from rag.eval import (
     RETRIEVAL_CASES,
     EvalReport,
     EvalResult,
+    EvalScores,
     ExpectedLabel,
     RetrievalCase,
+    RetrievalEvalReport,
+    RetrievalEvalResult,
     answer_accuracy,
     answer_matches,
+    evaluate_retrieval,
+    live_eval_passed,
     load_eval_report,
+    retrieval_eval_passed,
     score_eval_report,
     write_eval_report,
+    write_retrieval_eval,
 )
 from rag.ingest import ingest_corpus
 from rag.route import FallbackRouter
-from rag.schema import REFUSAL_ANSWER, AskResponse, RetrievedChunkRef
+from rag.schema import REFUSAL_ANSWER, AskResponse, RetrievedChunk, RetrievedChunkRef
+from rag.slug import slugify
+from rag.store import PolicyStore
 
 
 def test_answer_matches_is_case_insensitive_and_requires_every_marker() -> None:
@@ -75,6 +87,14 @@ def test_score_eval_report_counts_a_missing_version_and_a_missing_marker() -> No
     scores = score_eval_report(report)
     assert scores.recall == 0.5
     assert scores.accuracy == 0.5
+    assert not live_eval_passed(scores)
+
+
+def test_live_eval_passed_requires_perfect_recall_and_accuracy() -> None:
+    """Accept a live report only when both scores are 1.0."""
+    assert live_eval_passed(EvalScores(recall=1.0, accuracy=1.0))
+    assert not live_eval_passed(EvalScores(recall=1.0, accuracy=0.9))
+    assert not live_eval_passed(EvalScores(recall=0.9, accuracy=1.0))
 
 
 @pytest.fixture(scope="module")
@@ -86,6 +106,66 @@ def indexed_policies(
     embedder = SentenceTransformerEmbeddingAdapter()
     ingest_corpus(store=store, embedder=embedder)
     return store, embedder
+
+
+def test_evaluate_retrieval_records_a_missing_section(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Name the section a question missed without calling a generator."""
+    weekend = RETRIEVAL_CASES[0]
+
+    def fake_retrieve(question: str, **kwargs: object) -> list[RetrievedChunk]:
+        """Return the expected sections, except the weekend question."""
+        case = next(case for case in RETRIEVAL_CASES if case.question == question)
+        if case is weekend:
+            return []
+        return [_chunk(label) for label in case.expected_labels]
+
+    monkeypatch.setattr("rag.eval.retrieve", fake_retrieve)
+    report = evaluate_retrieval(store=cast(PolicyStore, None), embedder=cast(Embedder, None))
+    assert report.recall < 1.0
+    assert not retrieval_eval_passed(report)
+    missed = next(result for result in report.results if result.question == weekend.question)
+    assert missed.missing == ["HR Policy v2.0 7.3 Weekend Abandonment Consequence"]
+    assert missed.retrieved == []
+    assert all(result.recalled for result in report.results if result is not missed)
+
+
+def test_retrieval_eval_passes_only_when_every_question_retrieves_chunks() -> None:
+    """Reject a perfect recall score when one question retrieved nothing."""
+    full = RetrievalEvalReport(
+        recall=1.0,
+        results=[
+            RetrievalEvalResult(
+                question="known",
+                recalled=True,
+                missing=[],
+                retrieved=["HR Policy v2.0 3.1 Requirement"],
+            )
+        ],
+    )
+    empty = full.model_copy(
+        update={
+            "results": [RetrievalEvalResult(question="known", recalled=True, missing=[], retrieved=[])],
+        }
+    )
+    assert retrieval_eval_passed(full)
+    assert not retrieval_eval_passed(empty)
+
+
+def test_write_retrieval_eval_round_trips(tmp_path: Path) -> None:
+    """Save the retrieval report without generated answers."""
+    report = RetrievalEvalReport(
+        recall=1.0,
+        results=[
+            RetrievalEvalResult(
+                question=RETRIEVAL_CASES[0].question,
+                recalled=True,
+                missing=[],
+                retrieved=["HR Policy v2.0 7.3 Weekend Abandonment Consequence"],
+            )
+        ],
+    )
+    path = write_retrieval_eval(tmp_path / "retrieval_eval.json", report)
+    assert RetrievalEvalReport.model_validate_json(path.read_text(encoding="utf-8")) == report
 
 
 def test_saved_report_scores_recall_and_accuracy(
@@ -140,6 +220,24 @@ class MarkerGenerator:
                 "sources": list(range(1, excerpt_count + 1)),
             }
         )
+
+
+def _chunk(label: ExpectedLabel) -> RetrievedChunk:
+    """Build a retrieved chunk whose citation label is the expected section."""
+    numbered = re.match(r"^(\d+\.\d+) (.+)$", label.section)
+    parent = re.match(r"^(\d+)\. (.+)$", label.section)
+    matched = numbered or parent
+    assert matched is not None
+    section, title = matched.group(1), matched.group(2)
+    return RetrievedChunk(
+        chunk_id=f"{slugify(label.document)}:v{label.version}:section-{section}",
+        document=label.document,
+        version=label.version,
+        section=section,
+        section_title=title,
+        text="policy text",
+        distance=0.1,
+    )
 
 
 def _saved(answer: str, labels: Sequence[ExpectedLabel]) -> AskResponse:

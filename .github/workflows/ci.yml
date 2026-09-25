@@ -2,24 +2,108 @@ name: CI
 
 on:
   push:
+    branches: [main]
   pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   check:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
           python-version: "3.12"
           cache: pip
+
       - name: Install dependencies
-        run: python -m pip install -r requirements.txt
-      - name: Ruff
-        run: ruff check .
-      - name: Ruff format
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+
+      - name: Lint
+        run: ruff check --output-format=github .
+
+      - name: Format
         run: ruff format --check .
-      - name: Mypy
+
+      - name: Type check
         run: mypy
-      - name: Pytest
+
+      - name: Test
         run: pytest
+
+      - name: Evaluate retrieval
+        run: python -m rag.eval --retrieval-only
+
+      - name: Upload retrieval report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: retrieval-eval
+          path: outputs/retrieval_eval.json
+          if-no-files-found: warn
+
+  eval:
+    needs: check
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    env:
+      OLLAMA_HOST: http://127.0.0.1:11434
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+
+      - name: Install Ollama
+        run: curl -fsSL https://ollama.com/install.sh | sh
+
+      - name: Start Ollama
+        run: |
+          ollama serve &
+          for i in $(seq 1 30); do
+            curl -s http://127.0.0.1:11434/api/tags && break
+            sleep 2
+          done
+          curl -sf http://127.0.0.1:11434/api/tags
+
+      - name: Cache Qwen weights
+        uses: actions/cache@v4
+        with:
+          path: ~/.ollama/models
+          key: ollama-qwen3-8b-q4_K_M-${{ runner.os }}
+
+      - name: Pull Qwen
+        run: ollama pull qwen3:8b-q4_K_M
+
+      - name: Ingest policies
+        run: python ingest.py --chroma-path "$RUNNER_TEMP/chroma"
+
+      - name: Evaluate with Qwen
+        run: python -m rag.eval --chroma-path "$RUNNER_TEMP/chroma" --output outputs/eval_report.json
+
+      - name: Upload eval report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-report
+          path: outputs/eval_report.json
+          if-no-files-found: warn

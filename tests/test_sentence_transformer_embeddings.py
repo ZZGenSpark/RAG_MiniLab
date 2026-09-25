@@ -86,6 +86,7 @@ def test_numpy_rows_are_converted_to_plain_floats() -> None:
 
     class NumpyLike:
         def __init__(self, rows: list[list[int]]) -> None:
+            """Store the integer rows that `tolist` returns."""
             self.rows = rows
 
         def tolist(self) -> list[list[int]]:

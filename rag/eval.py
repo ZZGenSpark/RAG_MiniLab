@@ -1,7 +1,8 @@
 """Score retrieval recall and answer accuracy for the policy questions.
 
 Recall checks section labels. Accuracy checks that every answer marker is present.
-CI runs the questions with a fake generator. The CLI writes a live Ollama report.
+`--retrieval-only` scores recall with MiniLM and the cross-encoder. The default CLI
+asks Ollama and fails unless both scores are 1.0.
 """
 
 from __future__ import annotations
@@ -13,13 +14,13 @@ from pathlib import Path
 from pydantic import BaseModel, ConfigDict
 
 from adapter.chroma_store import ChromaPolicyStore
-from adapter.ollama_chat import OllamaChatAdapter
-from config import CHROMA_PATH, EVAL_REPORT_PATH
+from config import CHROMA_PATH, EVAL_REPORT_PATH, RETRIEVAL_EVAL_PATH
 from rag.ask import ask
 from rag.embeddings import Embedder
 from rag.generate import Generator
 from rag.rerank import Reranker
-from rag.route import Router
+from rag.retrieve import retrieve
+from rag.route import FallbackRouter, Router
 from rag.schema import REFUSAL_ANSWER, AskResponse, RetrievedChunk
 from rag.store import PolicyStore
 
@@ -215,6 +216,11 @@ def response_recalls(case: RetrievalCase, response: AskResponse) -> bool:
     )
 
 
+def live_eval_passed(scores: EvalScores) -> bool:
+    """Return whether live recall and answer accuracy both meet the gate."""
+    return scores.recall == 1.0 and scores.accuracy == 1.0
+
+
 def score_eval_report(report: EvalReport) -> EvalScores:
     """Score recall and accuracy from saved answers. This does not call a model."""
     pairs = [(case_for_question(result.question), result.response) for result in report.results]
@@ -288,32 +294,154 @@ def load_eval_report(path: str | Path = EVAL_REPORT_PATH) -> EvalReport:
     return EvalReport.model_validate_json(Path(path).read_text(encoding="utf-8"))
 
 
-def main() -> None:
-    """Ask the evaluation questions with Ollama and write outputs/eval_report.json."""
-    from adapter.sentence_transformer_embeddings import SentenceTransformerEmbeddingAdapter
+class RetrievalEvalResult(BaseModel):
+    """One question after retrieval, with the section labels that were missing."""
 
+    model_config = ConfigDict(extra="forbid")
+
+    question: str
+    recalled: bool
+    missing: list[str]
+    retrieved: list[str]
+
+
+class RetrievalEvalReport(BaseModel):
+    """Recall for the evaluation questions. This report has no generated answers."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    recall: float
+    results: list[RetrievalEvalResult]
+
+
+def evaluate_retrieval(
+    *,
+    store: PolicyStore,
+    embedder: Embedder,
+    router: Router | None = None,
+) -> RetrievalEvalReport:
+    """Retrieve every evaluation question and score section recall.
+
+    The router defaults to the section-code fallback, so this does not call Jev.
+    Retrieval uses the local cross-encoder. No chat model is called.
+    """
+    chosen = router if router is not None else FallbackRouter()
+    pairs: list[tuple[RetrievalCase, Sequence[RetrievedChunk]]] = []
+    results: list[RetrievalEvalResult] = []
+    for case in RETRIEVAL_CASES:
+        hits = retrieve(
+            case.question,
+            store=store,
+            embedder=embedder,
+            decision=chosen.choose(case.question),
+        )
+        pairs.append((case, hits))
+        missing = [
+            f"{label.document} v{label.version} {label.section}"
+            for label in case.expected_labels
+            if not label_was_retrieved(label, hits)
+        ]
+        results.append(
+            RetrievalEvalResult(
+                question=case.question,
+                recalled=case_recalled(case, hits),
+                missing=missing,
+                retrieved=[f"{hit.document} v{hit.version} {hit.citation_section}" for hit in hits],
+            )
+        )
+    return RetrievalEvalReport(recall=retrieval_recall(pairs), results=results)
+
+
+def retrieval_eval_passed(report: RetrievalEvalReport) -> bool:
+    """Return whether every question retrieved chunks and every labeled section was found."""
+    return report.recall == 1.0 and all(result.retrieved for result in report.results)
+
+
+def write_retrieval_eval(path: str | Path, report: RetrievalEvalReport) -> Path:
+    """Write a retrieval-only report. This file does not contain generated answers."""
+    output_path = Path(path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(report.model_dump_json(indent=2) + "\n", encoding="utf-8")
+    return output_path
+
+
+def _print_retrieval_eval(report: RetrievalEvalReport) -> None:
+    """Print recall and every question that missed a section or retrieved nothing."""
+    print(f"retrieval recall: {report.recall:.3f}")
+    for result in report.results:
+        if result.recalled and result.retrieved:
+            continue
+        print(result.question)
+        print(f"  missing: {result.missing}")
+        print(f"  retrieved: {result.retrieved}")
+
+
+def _run_retrieval_eval(output: Path, chroma_path: Path | None) -> None:
+    """Ingest the policies, score recall, and stop when a required section is missing."""
+    import tempfile
+
+    from adapter.sentence_transformer_embeddings import SentenceTransformerEmbeddingAdapter
+    from rag.ingest import ingest_corpus
+
+    def _score(path: Path) -> None:
+        store = ChromaPolicyStore(path)
+        embedder = SentenceTransformerEmbeddingAdapter()
+        ingest_corpus(store=store, embedder=embedder)
+        report = evaluate_retrieval(store=store, embedder=embedder)
+        written = write_retrieval_eval(output, report)
+        _print_retrieval_eval(report)
+        print(f"Wrote {written}")
+        if not retrieval_eval_passed(report):
+            raise SystemExit(1)
+
+    if chroma_path is None:
+        with tempfile.TemporaryDirectory(prefix="retrieval-eval-") as directory:
+            _score(Path(directory))
+        return
+    _score(chroma_path)
+
+
+def main() -> None:
+    """Score retrieval, or ask the questions with Ollama and write outputs/eval_report.json."""
     parser = argparse.ArgumentParser(description="Run the evaluation questions and save the report.")
+    parser.add_argument(
+        "--retrieval-only",
+        action="store_true",
+        help="Score retrieval recall with MiniLM and the cross-encoder. Does not call Ollama.",
+    )
     parser.add_argument(
         "--output",
         type=Path,
-        default=EVAL_REPORT_PATH,
-        help="Path to write the evaluation report.",
+        default=None,
+        help="Path to write the report. Defaults to the retrieval or Ollama report path.",
     )
     parser.add_argument(
         "--chroma-path",
         type=Path,
         default=None,
-        help="Optional Chroma persistence directory. Defaults to CHROMA_PATH.",
+        help="Optional Chroma persistence directory. Retrieval-only defaults to a temporary directory.",
     )
     args = parser.parse_args()
+    if args.retrieval_only:
+        _run_retrieval_eval(args.output or RETRIEVAL_EVAL_PATH, args.chroma_path)
+        return
+
+    from adapter.ollama_chat import OllamaChatAdapter
+    from adapter.sentence_transformer_embeddings import SentenceTransformerEmbeddingAdapter
+
     store = ChromaPolicyStore(args.chroma_path or CHROMA_PATH)
     path = write_eval_report(
-        args.output,
+        args.output or EVAL_REPORT_PATH,
         store=store,
         embedder=SentenceTransformerEmbeddingAdapter(),
         generator=OllamaChatAdapter(),
     )
+    scores = score_eval_report(load_eval_report(path))
     print(f"Wrote {path}")
+    print(f"recall: {scores.recall:.3f}")
+    print(f"accuracy: {scores.accuracy:.3f}")
+    if not live_eval_passed(scores):
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":
