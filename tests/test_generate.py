@@ -300,6 +300,7 @@ def test_ask_builds_structured_response_from_retrieval_not_the_model(tmp_path) -
         generator=chat,
         router=FallbackRouter(),
         reranker=KeepingReranker(),
+        audit_path=tmp_path / "audit.jsonl",
     )
 
     assert response.citation is not None
@@ -322,6 +323,7 @@ def test_ask_refusal_keeps_the_retrieved_chunks(tmp_path) -> None:
         generator=chat,
         router=FallbackRouter(),
         reranker=KeepingReranker(),
+        audit_path=tmp_path / "audit.jsonl",
     )
 
     assert response.answer == REFUSAL_ANSWER

@@ -161,6 +161,15 @@ class GroundedModelOutput(BaseModel):
     answer: str = ""
 
 
+class SourceConflict(BaseModel):
+    """One document title retrieved at more than one version."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    document: str = Field(min_length=1)
+    versions: list[str] = Field(min_length=2)
+
+
 class AskResponse(BaseModel):
     """Structured output required by the assignment."""
 
@@ -169,6 +178,7 @@ class AskResponse(BaseModel):
     answer: str = Field(min_length=1)
     citation: Citation | None
     retrieved_chunks: list[RetrievedChunkRef] = Field(max_length=TOP_K)
+    source_conflicts: list[SourceConflict] = Field(default_factory=list)
 
     @field_validator("retrieved_chunks")
     @classmethod

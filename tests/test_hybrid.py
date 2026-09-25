@@ -191,6 +191,7 @@ def test_ask_uses_the_injected_router(tmp_path: Path, monkeypatch: pytest.Monkey
         generator=_NotAnswerable(),
         router=router,
         reranker=KeepingReranker(),
+        audit_path=tmp_path / "audit.jsonl",
     )
 
     assert router.questions == ["How long is the grace period?"]
