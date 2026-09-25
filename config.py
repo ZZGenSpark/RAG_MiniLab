@@ -48,8 +48,13 @@ SENTENCE_TRANSFORMER_MODEL = os.getenv(
     "sentence-transformers/all-MiniLM-L6-v2",
 )
 
-# Retrieval
+# Retrieval. Vector search keeps 5. Hybrid searches 10 on each leg, then equal-weight RRF keeps 5.
+# TOP_K is the final count after the later rerank. This step stops at the shortlist of 5.
 TOP_K = 3
+VECTOR_CANDIDATES = 5
+HYBRID_CANDIDATES = 10
+FUSED_CANDIDATES = 5
+RRF_K = 60
 
 # Chroma collection. The lab corpus lives in company_policies.
 COLLECTION_NAME = "company_policies"

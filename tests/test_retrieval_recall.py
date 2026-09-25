@@ -9,6 +9,7 @@ from adapter.sentence_transformer_embeddings import SentenceTransformerEmbedding
 from rag.eval import RETRIEVAL_CASES, RetrievalCase, retrieval_recall
 from rag.ingest import ingest_corpus
 from rag.retrieve import retrieve
+from rag.route import RetrievalDecision
 from rag.schema import RetrievedChunk
 
 
@@ -64,7 +65,12 @@ def test_indexed_policies_recall_every_expected_section(
     pairs: list[tuple[RetrievalCase, Sequence[RetrievedChunk]]] = []
     misses: list[str] = []
     for case in RETRIEVAL_CASES:
-        hits = retrieve(case.question, store=store, embedder=embedder)
+        hits = retrieve(
+            case.question,
+            store=store,
+            embedder=embedder,
+            decision=RetrievalDecision(strategy="vector"),
+        )
         pairs.append((case, hits))
         if not case.expected_labels:
             assert hits

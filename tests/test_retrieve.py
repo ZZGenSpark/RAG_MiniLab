@@ -1,4 +1,4 @@
-"""Check cosine retrieval ranking and the three-chunk cap."""
+"""Check cosine retrieval ranking and the five-chunk vector shortlist."""
 
 from collections.abc import Sequence
 from pathlib import Path
@@ -48,8 +48,8 @@ def ranked_store(tmp_path: Path) -> ChromaPolicyStore:
     return store
 
 
-def test_retrieve_returns_at_most_three_chunks_sorted_by_cosine_distance(ranked_store: ChromaPolicyStore) -> None:
-    """Return at most three chunks, closest cosine distance first."""
+def test_retrieve_returns_the_vector_shortlist_sorted_by_cosine_distance(ranked_store: ChromaPolicyStore) -> None:
+    """Return the five closest chunks. Vector search does not run BM25."""
     embedder = FakeEmbedder(query_vector=[0.95, 0.2, 0.1, 0.0, 0.0, 0.0])
     hits = retrieve(
         "How much can I spend on food each day?",
@@ -57,8 +57,8 @@ def test_retrieve_returns_at_most_three_chunks_sorted_by_cosine_distance(ranked_
         embedder=embedder,
     )
 
-    assert len(hits) <= 3
-    assert [hit.citation_section for hit in hits] == ["1. Meals", "2. Hotels", "3. Airfare"]
+    assert len(hits) == 5
+    assert [hit.citation_section for hit in hits[:3]] == ["1. Meals", "2. Hotels", "3. Airfare"]
     distances = [hit.distance for hit in hits]
     assert distances == sorted(distances)
     assert all(isinstance(distance, float) for distance in distances)
@@ -82,15 +82,15 @@ def test_retrieve_rejects_a_blank_question(ranked_store: ChromaPolicyStore) -> N
         retrieve("   ", store=ranked_store, embedder=ExplodingEmbedder())
 
 
-def test_retrieve_caps_the_caller_limit_at_top_k(ranked_store: ChromaPolicyStore) -> None:
-    """Return at most the configured top-k even when the caller asks for more."""
+def test_retrieve_caps_the_vector_shortlist_at_five(ranked_store: ChromaPolicyStore) -> None:
+    """Return five chunks when the caller asks for more than the vector shortlist."""
     hits = retrieve(
         "How much can I spend on food each day?",
         store=ranked_store,
         embedder=FakeEmbedder([0.95, 0.2, 0.1, 0.0, 0.0, 0.0]),
         n_results=10,
     )
-    assert len(hits) == 3
+    assert len(hits) == 5
 
 
 def test_retrieve_honors_a_smaller_result_limit(ranked_store: ChromaPolicyStore) -> None:

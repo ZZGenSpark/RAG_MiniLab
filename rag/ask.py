@@ -1,13 +1,15 @@
-"""Answer a question from the ingested expense policy.
+"""Answer a question from the ingested policies.
 
-Retrieves the closest chunks and returns a grounded answer with a citation.
+Routes the question, retrieves excerpts, and returns a grounded answer with a citation.
 """
 
 from __future__ import annotations
 
+from config import TOP_K
 from rag.embeddings import Embedder
 from rag.generate import Generator, generate_answer
 from rag.retrieve import retrieve
+from rag.route import Router, route
 from rag.schema import AskResponse
 from rag.store import PolicyStore
 
@@ -18,12 +20,16 @@ def ask(
     store: PolicyStore,
     embedder: Embedder,
     generator: Generator,
+    router: Router | None = None,
 ) -> AskResponse:
-    """Retrieve policy excerpts and return a cited answer or a refusal."""
-    hits = retrieve(question, store=store, embedder=embedder)
-    answer, citation = generate_answer(question, hits, generator=generator)
+    """Choose vector or hybrid, retrieve excerpts, and return a cited answer or a refusal."""
+    decision = route(question, router=router)
+    hits = retrieve(question, store=store, embedder=embedder, decision=decision)
+    shown = hits[:TOP_K]
+    answer, citation = generate_answer(question, shown, generator=generator)
+    cited = sorted(shown, key=lambda hit: (hit.distance, hit.chunk_id))
     return AskResponse(
         answer=answer,
         citation=citation,
-        retrieved_chunks=[hit.to_ref() for hit in hits],
+        retrieved_chunks=[hit.to_ref() for hit in cited],
     )

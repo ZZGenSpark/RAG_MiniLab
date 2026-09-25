@@ -11,6 +11,7 @@ from config import CHAT_TEMPERATURE
 from prompt.grounded_excerpt import INSTRUCTION, build_grounded_excerpt_prompt
 from rag.ask import ask
 from rag.generate import REFUSAL_ANSWER, build_prompt, generate_answer
+from rag.route import FallbackRouter
 from rag.schema import PolicyChunk, RetrievedChunk
 
 
@@ -296,6 +297,7 @@ def test_ask_builds_structured_response_from_retrieval_not_the_model(tmp_path) -
         store=store,
         embedder=FakeEmbedder(),
         generator=chat,
+        router=FallbackRouter(),
     )
 
     assert response.citation is not None
@@ -316,6 +318,7 @@ def test_ask_refusal_keeps_the_retrieved_chunks(tmp_path) -> None:
         store=store,
         embedder=FakeEmbedder(),
         generator=chat,
+        router=FallbackRouter(),
     )
 
     assert response.answer == REFUSAL_ANSWER
