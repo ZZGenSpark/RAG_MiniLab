@@ -1,4 +1,4 @@
-"""Public API for the expense-policy RAG pipeline.
+"""Public API for the company-policy RAG pipeline.
 
 Re-exports ingest, retrieval, generation, and the shared schema types.
 """

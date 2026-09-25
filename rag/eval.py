@@ -7,7 +7,6 @@ CI runs the questions with a fake generator. The CLI writes a live Ollama report
 from __future__ import annotations
 
 import argparse
-import json
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -15,8 +14,7 @@ from pydantic import BaseModel, ConfigDict
 
 from adapter.chroma_store import ChromaPolicyStore
 from adapter.ollama_chat import OllamaChatAdapter
-from adapter.ollama_embeddings import OllamaEmbeddingAdapter
-from config import CHROMA_PATH, EVAL_OUTPUT_PATH, EVAL_REPORT_PATH
+from config import CHROMA_PATH, EVAL_REPORT_PATH
 from rag.ask import ask
 from rag.embeddings import Embedder
 from rag.generate import Generator
@@ -24,54 +22,6 @@ from rag.rerank import Reranker
 from rag.route import Router
 from rag.schema import REFUSAL_ANSWER, AskResponse, RetrievedChunk
 from rag.store import PolicyStore
-
-
-def answer_matches(case: RequiredCase | RetrievalCase, answer: str) -> bool:
-    """Return whether every expected marker appears in the answer."""
-    text = answer.lower()
-    return all(marker.lower() in text for marker in case.answer_markers)
-
-
-class RequiredCase(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    question: str
-    expected_citation: str | None
-    answer_markers: list[str]
-
-
-REQUIRED_CASES = [
-    RequiredCase(
-        question="How much can I spend on food each day?",
-        expected_citation="1. Meals",
-        answer_markers=["$65"],
-    ),
-    RequiredCase(
-        question="Can I book first-class airfare?",
-        expected_citation="3. Airfare",
-        answer_markers=["vice president"],
-    ),
-    RequiredCase(
-        question="My hotel costs $250. What do I need?",
-        expected_citation="2. Hotels",
-        answer_markers=["manager", "$225"],
-    ),
-    RequiredCase(
-        question="Do I need a receipt for a $20 taxi?",
-        expected_citation="5. Receipts",
-        answer_markers=["receipt"],
-    ),
-    RequiredCase(
-        question="Can I claim a limousine upgrade?",
-        expected_citation="4. Ground Transportation",
-        answer_markers=["cannot claim"],
-    ),
-    RequiredCase(
-        question="Does the company reimburse gym memberships?",
-        expected_citation=None,
-        answer_markers=[REFUSAL_ANSWER],
-    ),
-]
 
 
 class ExpectedLabel(BaseModel):
@@ -92,6 +42,12 @@ class RetrievalCase(BaseModel):
     question: str
     expected_labels: list[ExpectedLabel]
     answer_markers: list[str]
+
+
+def answer_matches(case: RetrievalCase, answer: str) -> bool:
+    """Return whether every expected marker appears in the answer."""
+    text = answer.lower()
+    return all(marker.lower() in text for marker in case.answer_markers)
 
 
 RETRIEVAL_CASES = [
@@ -330,51 +286,6 @@ def write_eval_report(
 def load_eval_report(path: str | Path = EVAL_REPORT_PATH) -> EvalReport:
     """Load a saved evaluation report."""
     return EvalReport.model_validate_json(Path(path).read_text(encoding="utf-8"))
-
-
-def run_required_questions(store: PolicyStore | None = None) -> list[dict]:
-    """Ask each required question and return the raw result rows."""
-    policy_store = store or ChromaPolicyStore(CHROMA_PATH)
-    embedder = OllamaEmbeddingAdapter()
-    generator = OllamaChatAdapter()
-    results = []
-    for case in REQUIRED_CASES:
-        response = ask(
-            case.question,
-            store=policy_store,
-            embedder=embedder,
-            generator=generator,
-        )
-        results.append(
-            {
-                "question": case.question,
-                "expected_citation": case.expected_citation,
-                "response": response.model_dump(),
-            }
-        )
-    return results
-
-
-def write_required_questions(
-    path: str | Path = EVAL_OUTPUT_PATH,
-    *,
-    store: PolicyStore | None = None,
-) -> Path:
-    """Run the required questions and write the JSON results."""
-    output_path = Path(path)
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(json.dumps(run_required_questions(store=store), indent=2) + "\n")
-    return output_path
-
-
-def load_required_questions(path: str | Path = EVAL_OUTPUT_PATH) -> list[dict]:
-    """Load previously saved required-question results."""
-    return json.loads(Path(path).read_text(encoding="utf-8"))
-
-
-def response_from_result(result: dict) -> AskResponse:
-    """Rebuild an ask response from one saved result row."""
-    return AskResponse.model_validate(result["response"])
 
 
 def main() -> None:

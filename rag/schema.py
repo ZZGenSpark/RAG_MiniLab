@@ -198,17 +198,6 @@ class AskResponse(BaseModel):
     retrieval: RetrievalInfo = Field(default_factory=RetrievalInfo)
     source_conflicts: list[SourceConflict] = Field(default_factory=list)
 
-    @model_validator(mode="before")
-    @classmethod
-    def citations_from_a_single_citation(cls, value: object) -> object:
-        """Accept a saved row that still has one citation field."""
-        if not isinstance(value, dict) or "citations" in value or "citation" not in value:
-            return value
-        data = dict(value)
-        single = data.pop("citation")
-        data["citations"] = [] if single is None else [single]
-        return data
-
     @field_validator("retrieved_chunks")
     @classmethod
     def distances_are_sorted(cls, chunks: list[RetrievedChunkRef]) -> list[RetrievedChunkRef]:

@@ -6,7 +6,7 @@ import argparse
 
 from adapter.chroma_store import ChromaPolicyStore
 from adapter.ollama_chat import OllamaChatAdapter
-from adapter.ollama_embeddings import OllamaEmbeddingAdapter
+from adapter.sentence_transformer_embeddings import SentenceTransformerEmbeddingAdapter
 from config import CHROMA_PATH
 from rag.ask import ask
 
@@ -26,7 +26,7 @@ def main() -> None:
     response = ask(
         args.question,
         store=store,
-        embedder=OllamaEmbeddingAdapter(),
+        embedder=SentenceTransformerEmbeddingAdapter(),
         generator=OllamaChatAdapter(),
     )
     print(response.model_dump_json(indent=2))

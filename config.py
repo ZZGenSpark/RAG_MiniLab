@@ -27,24 +27,18 @@ INGEST_SOURCES = (
     SOURCE_DIR / "Doofenshmirtz Evil Inc - Time and Usage Policy v1.0 1.pdf",
 )
 CHROMA_PATH = Path(os.getenv("CHROMA_PATH", REPO_ROOT / "chroma_db"))
-EVAL_OUTPUT_PATH = REPO_ROOT / "outputs" / "required_questions.json"
 EVAL_REPORT_PATH = REPO_ROOT / "outputs" / "eval_report.json"
 AUDIT_PATH = REPO_ROOT / "outputs" / "audit.jsonl"
 
-# Ollama. Tags name one release. Unqualified names follow latest.
-# nomic-embed-text:v1.5 — library digest 0a109f422b47
+# Ollama chat. Tags name one release. Unqualified names follow latest.
 # qwen3:8b-q4_K_M — library digest 500a1f067a9f (the weights behind qwen3:8b)
 OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://127.0.0.1:11434")
-EMBED_MODEL_NAME = "nomic-embed-text"
-EMBED_MODEL_VERSION = "v1.5"
 CHAT_MODEL_NAME = "qwen3"
 CHAT_MODEL_VERSION = "8b-q4_K_M"
-EMBED_MODEL = os.getenv("OLLAMA_EMBED_MODEL", f"{EMBED_MODEL_NAME}:{EMBED_MODEL_VERSION}")
 CHAT_MODEL = os.getenv("OLLAMA_CHAT_MODEL", f"{CHAT_MODEL_NAME}:{CHAT_MODEL_VERSION}")
 CHAT_TEMPERATURE = 0
 
 # Local embeddings for the lab. all-MiniLM-L6-v2 is 384-dimensional and is stored in cosine space.
-# The Ollama embedder above stays available and is not this path.
 SENTENCE_TRANSFORMER_MODEL = os.getenv(
     "SENTENCE_TRANSFORMER_MODEL",
     "sentence-transformers/all-MiniLM-L6-v2",
