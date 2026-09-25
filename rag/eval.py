@@ -1,12 +1,14 @@
-"""Run the six required policy questions and save their answers.
+"""Run policy questions and score retrieval recall.
 
-Compares each answer with the expected citation and required phrases.
+Answer markers are recorded on each case. Recall checks section labels only.
+Answer-marker checks are added once generation exists.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+from collections.abc import Sequence
 from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict
@@ -16,7 +18,7 @@ from adapter.ollama_chat import OllamaChatAdapter
 from adapter.ollama_embeddings import OllamaEmbeddingAdapter
 from config import CHROMA_PATH, EVAL_OUTPUT_PATH
 from rag.ask import ask
-from rag.schema import REFUSAL_ANSWER, AskResponse
+from rag.schema import REFUSAL_ANSWER, AskResponse, RetrievedChunk
 from rag.store import PolicyStore
 
 
@@ -66,6 +68,114 @@ REQUIRED_CASES = [
         answer_markers=[REFUSAL_ANSWER],
     ),
 ]
+
+
+class ExpectedLabel(BaseModel):
+    """One document version and section label that retrieval should return."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    document: str
+    version: str
+    section: str
+
+
+class RetrievalCase(BaseModel):
+    """A question, the sections recall must find, and the answer markers saved for later."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    question: str
+    expected_labels: list[ExpectedLabel]
+    answer_markers: list[str]
+
+
+RETRIEVAL_CASES = [
+    RetrievalCase(
+        question="What happens to food left in the shared refrigerator over the weekend?",
+        expected_labels=[
+            ExpectedLabel(
+                document="HR Policy",
+                version="2.0",
+                section="7.3 Weekend Abandonment Consequence",
+            )
+        ],
+        answer_markers=["abandoned", "spoonful"],
+    ),
+    RetrievalCase(
+        question="How long can an employee play foosball each day?",
+        expected_labels=[
+            ExpectedLabel(document="Time & Usage Policy", version="1.0", section="4.1 Daily Allowance"),
+            ExpectedLabel(document="Time & Usage Policy", version="2.0", section="4.1 Daily Allowance"),
+        ],
+        answer_markers=["20 minutes"],
+    ),
+    RetrievalCase(
+        question="Does the company match retirement contributions?",
+        expected_labels=[],
+        answer_markers=[REFUSAL_ANSWER],
+    ),
+    RetrievalCase(
+        question="Does every company email have to include a joke?",
+        expected_labels=[
+            ExpectedLabel(document="HR Policy", version="2.0", section="3.1 Requirement"),
+        ],
+        answer_markers=["joke"],
+    ),
+    RetrievalCase(
+        question="How long must I wait before correcting a boss who is wrong?",
+        expected_labels=[
+            ExpectedLabel(document="HR Policy", version="2.0", section="6. Boss Error Grace Period"),
+        ],
+        answer_markers=["30 minutes"],
+    ),
+    RetrievalCase(
+        question="How often are employees expected to work out?",
+        expected_labels=[
+            ExpectedLabel(document="Health & Wellness Policy", version="1.0", section="3.1 Minimum Requirement"),
+        ],
+        answer_markers=["three", "45 minutes"],
+    ),
+    RetrievalCase(
+        question="How long do employees stay indoors after a nuclear event?",
+        expected_labels=[
+            ExpectedLabel(document="Preparedness Policy", version="2.0", section="4.3 Duration of Sheltering"),
+        ],
+        answer_markers=["two weeks"],
+    ),
+    RetrievalCase(
+        question="How much paid time off do I get when I adopt a pet?",
+        expected_labels=[
+            ExpectedLabel(document="HR Policy", version="2.0", section="5.1 Leave Entitlement"),
+        ],
+        answer_markers=["5 days", "dog"],
+    ),
+]
+
+
+def label_was_retrieved(label: ExpectedLabel, chunks: Sequence[RetrievedChunk]) -> bool:
+    """Return whether retrieval returned this document version and section label."""
+    return any(
+        chunk.document == label.document and chunk.version == label.version and chunk.citation_section == label.section
+        for chunk in chunks
+    )
+
+
+def case_recalled(case: RetrievalCase, chunks: Sequence[RetrievedChunk]) -> bool:
+    """Return whether every expected section label was retrieved.
+
+    A refusal has no expected label, so it is not a recall miss.
+    """
+    return all(label_was_retrieved(label, chunks) for label in case.expected_labels)
+
+
+def retrieval_recall(pairs: Sequence[tuple[RetrievalCase, Sequence[RetrievedChunk]]]) -> float:
+    """Return the fraction of labeled cases whose expected sections were all retrieved."""
+    labeled = [(case, chunks) for case, chunks in pairs if case.expected_labels]
+    if not labeled:
+        return 0.0
+    hits = sum(1 for case, chunks in labeled if case_recalled(case, chunks))
+    return hits / len(labeled)
 
 
 def run_required_questions(store: PolicyStore | None = None) -> list[dict]:

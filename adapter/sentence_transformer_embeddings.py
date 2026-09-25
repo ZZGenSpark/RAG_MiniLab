@@ -60,7 +60,7 @@ class SentenceTransformerEmbeddingAdapter:
         if self._encoder is None:
             from sentence_transformers import SentenceTransformer
 
-            self._encoder = SentenceTransformer(self.model_name)
+            self._encoder = cast(TextEncoder, SentenceTransformer(self.model_name))
         return self._encoder
 
     def _embed(self, texts: list[str]) -> list[list[float]]:
