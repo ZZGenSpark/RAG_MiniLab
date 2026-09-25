@@ -5,6 +5,7 @@ from pathlib import Path
 
 from adapter.chroma_store import ChromaPolicyStore
 from scripts.minimal_loop import KNOWN_TEXTS, QUESTION, run_minimal_loop
+from tests.support import KeepingReranker
 
 TOKEN_TEXT = KNOWN_TEXTS[0][2]
 FOOSBALL_TEXT = KNOWN_TEXTS[1][2]
@@ -42,7 +43,7 @@ def test_minimal_loop_retrieves_the_matching_text(tmp_path: Path) -> None:
     embedder = TwoTextEmbedder()
     store = ChromaPolicyStore(tmp_path / "chroma")
 
-    hits = run_minimal_loop(store, embedder)
+    hits = run_minimal_loop(store, embedder, reranker=KeepingReranker())
 
     assert store.count() == 2
     assert [hit.text for hit in hits] == [TOKEN_TEXT, FOOSBALL_TEXT]

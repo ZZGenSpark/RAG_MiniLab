@@ -14,6 +14,7 @@ from pathlib import Path
 from adapter.chroma_store import ChromaPolicyStore
 from adapter.ollama_embeddings import OllamaEmbeddingAdapter
 from rag.embeddings import Embedder
+from rag.rerank import Reranker
 from rag.retrieve import retrieve
 from rag.schema import PolicyChunk, RetrievedChunk
 from rag.slug import slugify
@@ -57,12 +58,13 @@ def run_minimal_loop(
     store: PolicyStore,
     embedder: Embedder,
     question: str = QUESTION,
+    reranker: Reranker | None = None,
 ) -> list[RetrievedChunk]:
     """Embed the two known texts, store them, and return the nearest chunks."""
     chunks = known_chunks()
     embeddings = embedder.embed_texts([chunk.text for chunk in chunks])
     store.upsert_chunks(chunks, embeddings)
-    return retrieve(question, store=store, embedder=embedder)
+    return retrieve(question, store=store, embedder=embedder, reranker=reranker)
 
 
 def main() -> None:

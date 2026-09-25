@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from config import FUSED_CANDIDATES, HYBRID_CANDIDATES, RRF_K, VECTOR_CANDIDATES
+from config import FUSED_CANDIDATES, HYBRID_CANDIDATES, RRF_K, TOP_K, VECTOR_CANDIDATES
 from rag.embeddings import Embedder
 from rag.lexical import bm25_top
+from rag.rerank import Reranker, rerank
 from rag.route import RetrievalDecision
 from rag.schema import PolicyChunk, RetrievedChunk
 from rag.store import PolicyStore
@@ -40,14 +41,15 @@ def retrieve(
     store: PolicyStore,
     embedder: Embedder,
     decision: RetrievalDecision | None = None,
-    n_results: int = FUSED_CANDIDATES,
+    reranker: Reranker | None = None,
+    n_results: int = TOP_K,
 ) -> list[RetrievedChunk]:
-    """Return the vector shortlist, or the hybrid shortlist of 5.
+    """Rerank the shortlist of 5 and return the top chunks.
 
     Vector search is one cosine query for 5 chunks. Hybrid search asks for 10
-    vector chunks and 10 BM25 chunks, then keeps 5 by equal-weight RRF.
-    Omitting the decision uses vector search. The caller passes a decision from
-    the router when the question should be allowed to select hybrid.
+    vector chunks and 10 BM25 chunks, then keeps 5 by equal-weight RRF. Both
+    paths score that shortlist once and keep the top results. Omitting the
+    decision uses vector search. Omitting the reranker uses the cross-encoder.
     """
     if not question.strip():
         raise ValueError("question must not be empty")
@@ -55,10 +57,19 @@ def retrieve(
         raise ValueError("n_results must be at least 1")
 
     chosen = decision or RetrievalDecision(strategy="vector")
-    limit = min(n_results, FUSED_CANDIDATES)
     if chosen.strategy == "vector":
-        return _vector_hits(question, store=store, embedder=embedder, n_results=VECTOR_CANDIDATES)[:limit]
-    return _hybrid_hits(question, store=store, embedder=embedder)[:limit]
+        shortlist = _vector_hits(question, store=store, embedder=embedder, n_results=VECTOR_CANDIDATES)
+    else:
+        shortlist = _hybrid_hits(question, store=store, embedder=embedder)
+    ranked = rerank(question, shortlist, reranker=reranker or _cross_encoder(), limit=TOP_K)
+    return ranked[:n_results]
+
+
+def _cross_encoder() -> Reranker:
+    """Return the local cross-encoder. It is the only reranker."""
+    from adapter.cross_encoder import CrossEncoderReranker
+
+    return CrossEncoderReranker()
 
 
 def _vector_hits(

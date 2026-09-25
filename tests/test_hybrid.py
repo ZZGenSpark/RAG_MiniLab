@@ -14,6 +14,7 @@ from rag.lexical import bm25_top, tokenize
 from rag.retrieve import fuse_reciprocal_ranks, retrieve
 from rag.route import RetrievalDecision
 from rag.schema import EmbeddedChunk, PolicyChunk, RetrievedChunk
+from tests.support import KeepingReranker
 
 QUESTION = "Section 7.3"
 SECTION = "7.3 Weekend Abandonment Consequence"
@@ -133,7 +134,12 @@ def test_vector_search_does_not_read_the_keyword_index(tmp_path: Path) -> None:
     """Ask Chroma for 5 chunks and do not load the corpus for BM25."""
     store = _hr_store(tmp_path)
     recorded = RecordingStore(store)
-    retrieve("How long is the grace period?", store=recorded, embedder=FixedEmbedder([1.0, 0.0]))
+    retrieve(
+        "How long is the grace period?",
+        store=recorded,
+        embedder=FixedEmbedder([1.0, 0.0]),
+        reranker=KeepingReranker(),
+    )
     assert recorded.queries == [5]
     assert recorded.get_all_calls == 0
 
@@ -148,24 +154,28 @@ def test_hybrid_returns_section_7_3_when_vector_search_misses_it(
     store = _hr_store(tmp_path)
     recorded = RecordingStore(store)
     embedder = FixedEmbedder([1.0, 0.0])
+    keeper = KeepingReranker()
     vector_hits = retrieve(
         QUESTION,
         store=recorded,
         embedder=embedder,
         decision=RetrievalDecision(strategy="vector"),
+        reranker=keeper,
     )
     hybrid_hits = retrieve(
         QUESTION,
         store=recorded,
         embedder=embedder,
         decision=RetrievalDecision(strategy="hybrid"),
+        reranker=keeper,
     )
 
     assert recorded.queries == [5, 10]
     assert recorded.get_all_calls == 1
     assert SECTION not in [hit.citation_section for hit in vector_hits]
     assert SECTION in [hit.citation_section for hit in hybrid_hits]
-    assert len(hybrid_hits) == 5
+    assert [len(shortlist) for shortlist in keeper.shortlists] == [5, 5]
+    assert len(hybrid_hits) == 3
 
 
 def test_ask_uses_the_injected_router(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -180,6 +190,7 @@ def test_ask_uses_the_injected_router(tmp_path: Path, monkeypatch: pytest.Monkey
         embedder=FixedEmbedder([1.0, 0.0]),
         generator=_NotAnswerable(),
         router=router,
+        reranker=KeepingReranker(),
     )
 
     assert router.questions == ["How long is the grace period?"]

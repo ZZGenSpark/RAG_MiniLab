@@ -8,6 +8,7 @@ from __future__ import annotations
 from config import TOP_K
 from rag.embeddings import Embedder
 from rag.generate import Generator, generate_answer
+from rag.rerank import Reranker
 from rag.retrieve import retrieve
 from rag.route import Router, route
 from rag.schema import AskResponse
@@ -21,10 +22,11 @@ def ask(
     embedder: Embedder,
     generator: Generator,
     router: Router | None = None,
+    reranker: Reranker | None = None,
 ) -> AskResponse:
-    """Choose vector or hybrid, retrieve excerpts, and return a cited answer or a refusal."""
+    """Choose vector or hybrid, rerank the shortlist, and return a cited answer or a refusal."""
     decision = route(question, router=router)
-    hits = retrieve(question, store=store, embedder=embedder, decision=decision)
+    hits = retrieve(question, store=store, embedder=embedder, decision=decision, reranker=reranker)
     shown = hits[:TOP_K]
     answer, citation = generate_answer(question, shown, generator=generator)
     cited = sorted(shown, key=lambda hit: (hit.distance, hit.chunk_id))

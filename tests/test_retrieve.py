@@ -1,4 +1,4 @@
-"""Check cosine retrieval ranking and the five-chunk vector shortlist."""
+"""Check cosine retrieval ranking and the reranked top three."""
 
 from collections.abc import Sequence
 from pathlib import Path
@@ -8,7 +8,7 @@ import pytest
 from adapter.chroma_store import ChromaPolicyStore
 from rag.chunking import chunk_policy_file
 from rag.retrieve import retrieve
-from tests.support import EXPENSE_POLICY_FIXTURE
+from tests.support import EXPENSE_POLICY_FIXTURE, KeepingReranker
 
 
 class FakeEmbedder:
@@ -49,16 +49,17 @@ def ranked_store(tmp_path: Path) -> ChromaPolicyStore:
 
 
 def test_retrieve_returns_the_vector_shortlist_sorted_by_cosine_distance(ranked_store: ChromaPolicyStore) -> None:
-    """Return the five closest chunks. Vector search does not run BM25."""
+    """Rerank keeps the three closest chunks when the scorer preserves cosine order."""
     embedder = FakeEmbedder(query_vector=[0.95, 0.2, 0.1, 0.0, 0.0, 0.0])
     hits = retrieve(
         "How much can I spend on food each day?",
         store=ranked_store,
         embedder=embedder,
+        reranker=KeepingReranker(),
     )
 
-    assert len(hits) == 5
-    assert [hit.citation_section for hit in hits[:3]] == ["1. Meals", "2. Hotels", "3. Airfare"]
+    assert len(hits) == 3
+    assert [hit.citation_section for hit in hits] == ["1. Meals", "2. Hotels", "3. Airfare"]
     distances = [hit.distance for hit in hits]
     assert distances == sorted(distances)
     assert all(isinstance(distance, float) for distance in distances)
@@ -82,15 +83,16 @@ def test_retrieve_rejects_a_blank_question(ranked_store: ChromaPolicyStore) -> N
         retrieve("   ", store=ranked_store, embedder=ExplodingEmbedder())
 
 
-def test_retrieve_caps_the_vector_shortlist_at_five(ranked_store: ChromaPolicyStore) -> None:
-    """Return five chunks when the caller asks for more than the vector shortlist."""
+def test_retrieve_caps_reranked_results_at_top_k(ranked_store: ChromaPolicyStore) -> None:
+    """Keep three chunks when the caller asks for more than the reranked result."""
     hits = retrieve(
         "How much can I spend on food each day?",
         store=ranked_store,
         embedder=FakeEmbedder([0.95, 0.2, 0.1, 0.0, 0.0, 0.0]),
+        reranker=KeepingReranker(),
         n_results=10,
     )
-    assert len(hits) == 5
+    assert len(hits) == 3
 
 
 def test_retrieve_honors_a_smaller_result_limit(ranked_store: ChromaPolicyStore) -> None:
@@ -99,6 +101,7 @@ def test_retrieve_honors_a_smaller_result_limit(ranked_store: ChromaPolicyStore)
         "How much can I spend on food each day?",
         store=ranked_store,
         embedder=FakeEmbedder([0.95, 0.2, 0.1, 0.0, 0.0, 0.0]),
+        reranker=KeepingReranker(),
         n_results=1,
     )
     assert [hit.citation_section for hit in hits] == ["1. Meals"]
@@ -110,6 +113,7 @@ def test_retrieve_does_not_depend_on_exact_keywords(ranked_store: ChromaPolicySt
         "Can I book first-class airfare?",
         store=ranked_store,
         embedder=FakeEmbedder([0.05, 0.1, 0.98, 0.0, 0.0, 0.0]),
+        reranker=KeepingReranker(),
     )
     assert hits[0].citation_section == "3. Airfare"
     assert hits[0].text.startswith("Employees must purchase economy airfare.")

@@ -47,9 +47,13 @@ SENTENCE_TRANSFORMER_MODEL = os.getenv(
     "SENTENCE_TRANSFORMER_MODEL",
     "sentence-transformers/all-MiniLM-L6-v2",
 )
+CROSS_ENCODER_MODEL = os.getenv(
+    "CROSS_ENCODER_MODEL",
+    "cross-encoder/ms-marco-MiniLM-L-6-v2",
+)
 
-# Retrieval. Vector search keeps 5. Hybrid searches 10 on each leg, then equal-weight RRF keeps 5.
-# TOP_K is the final count after the later rerank. This step stops at the shortlist of 5.
+# Retrieval. Vector search fetches 5. Hybrid fetches 10 on each leg, then equal-weight RRF keeps 5.
+# The cross-encoder reranks that shortlist and keeps TOP_K.
 TOP_K = 3
 VECTOR_CANDIDATES = 5
 HYBRID_CANDIDATES = 10
