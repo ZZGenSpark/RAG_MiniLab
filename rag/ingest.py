@@ -4,10 +4,36 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from config import POLICIES_DIR
 from rag.chunking import chunk_policy_file
 from rag.embeddings import Embedder
 from rag.schema import PolicyChunk
 from rag.store import PolicyStore
+
+
+def ingest_corpus(
+    policies_dir: str | Path = POLICIES_DIR,
+    *,
+    store: PolicyStore,
+    embedder: Embedder | None = None,
+) -> list[str]:
+    """Chunk source/policies markdown, embed it, and upsert company_policies.
+
+    Only markdown files in the directory are read. The default embedder is
+    MiniLM. The store upsert deletes chunk ids that are no longer in this
+    batch. This path does not call a chat model, a router, BM25, or a reranker.
+    """
+    directory = Path(policies_dir)
+    if not directory.is_dir():
+        raise ValueError(f"{directory} is not a policies directory")
+    return ingest_policy(directory, store=store, embedder=embedder or _minilm())
+
+
+def _minilm() -> Embedder:
+    """Return the local MiniLM embedder used for offline corpus ingest."""
+    from adapter.sentence_transformer_embeddings import SentenceTransformerEmbeddingAdapter
+
+    return SentenceTransformerEmbeddingAdapter()
 
 
 def ingest_policy(

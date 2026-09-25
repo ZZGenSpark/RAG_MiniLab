@@ -6,15 +6,14 @@ import argparse
 from pathlib import Path
 
 from adapter.chroma_store import ChromaPolicyStore
-from adapter.ollama_embeddings import OllamaEmbeddingAdapter
 from config import CHROMA_PATH, POLICIES_DIR
-from rag.ingest import ingest_policy
+from rag.ingest import ingest_corpus
 
 
 def main() -> None:
     """Parse CLI arguments and ingest the markdown policies."""
     parser = argparse.ArgumentParser(
-        description="Ingest markdown policies from source/policies into Chroma with Ollama embeddings."
+        description="Ingest markdown policies from source/policies into Chroma with MiniLM embeddings."
     )
     parser.add_argument(
         "--policies",
@@ -31,7 +30,7 @@ def main() -> None:
     args = parser.parse_args()
 
     store = ChromaPolicyStore(args.chroma_path or CHROMA_PATH)
-    chunk_ids = ingest_policy(args.policies, store=store, embedder=OllamaEmbeddingAdapter())
+    chunk_ids = ingest_corpus(args.policies, store=store)
     print(f"Ingested {len(chunk_ids)} policy chunks:")
     for chunk_id in chunk_ids:
         print(f"  {chunk_id}")

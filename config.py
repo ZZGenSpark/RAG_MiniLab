@@ -51,6 +51,6 @@ SENTENCE_TRANSFORMER_MODEL = os.getenv(
 # Retrieval
 TOP_K = 3
 
-# Chroma collection
-COLLECTION_NAME = "expense_policy"
+# Chroma collection. The lab corpus lives in company_policies.
+COLLECTION_NAME = "company_policies"
 DISTANCE_SPACE = "cosine"

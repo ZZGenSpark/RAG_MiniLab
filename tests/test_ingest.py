@@ -8,8 +8,11 @@ import pytest
 
 from adapter.chroma_store import ChromaPolicyStore
 from adapter.ollama_embeddings import DOCUMENT_PREFIX, QUERY_PREFIX, OllamaEmbeddingAdapter
+from adapter.sentence_transformer_embeddings import SentenceTransformerEmbeddingAdapter
+from config import COLLECTION_NAME, POLICIES_DIR
 from rag.chunking import chunk_policy_file
-from rag.ingest import ingest_policy
+from rag.ingest import _minilm, ingest_corpus, ingest_policy
+from rag.schema import PolicyChunk
 from tests.support import EXPENSE_POLICY_FIXTURE
 
 EMBEDDING_DIM = 8
@@ -189,3 +192,55 @@ def test_ingest_rejects_duplicate_chunk_ids_before_embedding(tmp_path: Path) -> 
             store=ChromaPolicyStore(tmp_path / "chroma"),
             embedder=ExplodingEmbedder(),
         )
+
+
+def test_ingest_corpus_defaults_to_minilm_without_loading_weights() -> None:
+    """Use the local MiniLM adapter, and do not download weights until encode."""
+    embedder = _minilm()
+    assert isinstance(embedder, SentenceTransformerEmbeddingAdapter)
+    assert embedder._encoder is None
+
+
+def test_ingest_corpus_indexes_policy_markdown_and_drops_stale_ids(tmp_path: Path) -> None:
+    """Embed every markdown policy, keep rule 7.3, and delete ids absent from the batch."""
+    embedder = FakeEmbedder()
+    store = ChromaPolicyStore(tmp_path / "chroma")
+    stale = PolicyChunk(
+        chunk_id="old-policy:v1.0:section-1",
+        document="Old Policy",
+        version="1.0",
+        section="1",
+        section_title="Retired",
+        text="This section is no longer in the corpus.",
+    )
+    store.upsert_chunks([stale], _vector())
+
+    written_ids = ingest_corpus(POLICIES_DIR, store=store, embedder=embedder)
+
+    expected_ids = [chunk.chunk_id for path in sorted(POLICIES_DIR.glob("*.md")) for chunk in chunk_policy_file(path)]
+    assert store.collection.name == COLLECTION_NAME == "company_policies"
+    assert written_ids == expected_ids
+    assert "hr-policy:v2.0:section-7.3" in written_ids
+    assert store.count() == len(written_ids)
+    assert stale.chunk_id not in {record.chunk_id for record in store.get_all()}
+    expected_texts = [chunk.text for path in sorted(POLICIES_DIR.glob("*.md")) for chunk in chunk_policy_file(path)]
+    assert embedder.calls == [expected_texts]
+
+
+def test_ingest_corpus_ignores_binaries_in_the_policies_directory(tmp_path: Path) -> None:
+    """Read markdown only, even when a PDF sits beside it."""
+    policies = tmp_path / "policies"
+    policies.mkdir()
+    (policies / "expense-policy.md").write_text(EXPENSE_POLICY_FIXTURE.read_text(encoding="utf-8"), encoding="utf-8")
+    (policies / "notes.pdf").write_bytes(b"%PDF-1.4")
+    store = ChromaPolicyStore(tmp_path / "chroma")
+
+    written_ids = ingest_corpus(policies, store=store, embedder=FakeEmbedder())
+
+    assert written_ids == [chunk.chunk_id for chunk in chunk_policy_file(EXPENSE_POLICY_FIXTURE)]
+    assert store.count() == 6
+
+
+def _vector() -> list[list[float]]:
+    """Return one embedding wide enough for the fake embedder."""
+    return [[float(position) for position in range(EMBEDDING_DIM)]]

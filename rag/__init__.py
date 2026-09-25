@@ -8,7 +8,7 @@ from rag.ask import ask
 from rag.chunking import chunk_policy, chunk_policy_file
 from rag.embeddings import Embedder
 from rag.generate import generate_answer
-from rag.ingest import ingest_policy
+from rag.ingest import ingest_corpus, ingest_policy
 from rag.retrieve import retrieve
 from rag.schema import (
     DISTANCE_SPACE,
@@ -38,6 +38,7 @@ __all__ = [
     "chunk_policy",
     "chunk_policy_file",
     "generate_answer",
+    "ingest_corpus",
     "ingest_policy",
     "retrieve",
 ]

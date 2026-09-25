@@ -16,7 +16,7 @@ In the Docker/devcontainer setup, Ollama is reached at `http://host.docker.inter
 python ingest.py
 ```
 
-Reads the markdown files in `source/policies/`, chunks each numbered section, and upserts text + vector + metadata into the `expense_policy` Chroma collection (cosine space). Re-running upserts the same stable IDs and drops sections that are no longer in those files.
+Reads only the markdown files in `source/policies/`, chunks each numbered rule, embeds them with MiniLM, and upserts text + vector + metadata into the `company_policies` Chroma collection (cosine space). Re-running upserts the same stable IDs and drops sections that are no longer in those files.
 
 Optional: `python ingest.py --policies source/policies --chroma-path /path/to/chroma`
 
@@ -50,7 +50,7 @@ GitHub Actions runs ruff, mypy, and pytest on Python 3.12. That job does not cal
 
 ## Chroma persistence
 
-Chunks live on disk under `CHROMA_PATH` (default `<repo>/chroma_db`; `/app/chroma_db` in Docker). The directory is gitignored. Compose mounts it as the `chroma_data` volume. Schema: [rag/schema.py](rag/schema.py) (`expense_policy`, `hnsw:space=cosine`).
+Chunks live on disk under `CHROMA_PATH` (default `<repo>/chroma_db`; `/app/chroma_db` in Docker). The directory is gitignored. Compose mounts it as the `chroma_data` volume. Schema: [rag/schema.py](rag/schema.py) (`company_policies`, `hnsw:space=cosine`).
 
 ## Practice updates
 

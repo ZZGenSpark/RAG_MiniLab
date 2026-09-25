@@ -24,7 +24,7 @@ class ChromaPolicyStore:
     """Persist policy chunks and query them by cosine distance in Chroma."""
 
     def __init__(self, path: str | Path | None = None) -> None:
-        """Open or create the persistent expense-policy collection."""
+        """Open or create the persistent company-policies collection."""
         self.path = Path(path or CHROMA_PATH)
         self.path.mkdir(parents=True, exist_ok=True)
         self.client = chromadb.PersistentClient(path=str(self.path))
