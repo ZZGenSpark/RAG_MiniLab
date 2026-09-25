@@ -138,7 +138,7 @@ def test_saved_report_scores_recall_and_accuracy(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Write the eight answers with a fake generator, then score the saved report."""
+    """Write every answer with a fake generator, then score the saved report."""
 
     def fail_if_jev_is_called(self: object, question: str) -> None:
         """Fail the test if the live router is constructed."""

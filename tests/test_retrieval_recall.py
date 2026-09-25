@@ -9,7 +9,7 @@ from adapter.sentence_transformer_embeddings import SentenceTransformerEmbedding
 from rag.eval import RETRIEVAL_CASES, RetrievalCase, retrieval_recall
 from rag.ingest import ingest_corpus
 from rag.retrieve import retrieve
-from rag.route import RetrievalDecision
+from rag.route import fallback_decision
 from rag.schema import RetrievedChunk
 
 
@@ -60,7 +60,7 @@ def indexed_policies(
 def test_indexed_policies_recall_every_expected_section(
     indexed_policies: tuple[ChromaPolicyStore, SentenceTransformerEmbeddingAdapter],
 ) -> None:
-    """Retrieve each question and require every expected section label to come back."""
+    """Retrieve each question with the section-code router and require every expected label."""
     store, embedder = indexed_policies
     pairs: list[tuple[RetrievalCase, Sequence[RetrievedChunk]]] = []
     misses: list[str] = []
@@ -69,7 +69,7 @@ def test_indexed_policies_recall_every_expected_section(
             case.question,
             store=store,
             embedder=embedder,
-            decision=RetrievalDecision(strategy="vector"),
+            decision=fallback_decision(case.question),
         )
         pairs.append((case, hits))
         if not case.expected_labels:

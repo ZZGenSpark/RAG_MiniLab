@@ -320,6 +320,154 @@
         },
         "source_conflicts": []
       }
+    },
+    {
+      "question": "What does Section 7.3 say happens to food left in the refrigerator over the weekend?",
+      "response": {
+        "answer": "Section 7.3 states that food left in the shared refrigerator over the weekend will be treated as abandoned. The responsible employee, identified via the fridge log, will be required to eat at least one spoonful of the food, in whatever state it has reached, before it is disposed of.",
+        "citations": [
+          {
+            "document": "HR Policy",
+            "version": "2.0",
+            "section": "7.3 Weekend Abandonment Consequence"
+          }
+        ],
+        "retrieved_chunks": [
+          {
+            "section": "7.3 Weekend Abandonment Consequence",
+            "distance": 0.33727550506591797,
+            "document": "HR Policy",
+            "version": "2.0"
+          },
+          {
+            "section": "7.1 Ownership",
+            "distance": 0.5064406394958496,
+            "document": "HR Policy",
+            "version": "2.0"
+          },
+          {
+            "section": "9. Acknowledgment",
+            "distance": 0.6622596383094788,
+            "document": "HR Policy",
+            "version": "2.0"
+          }
+        ],
+        "retrieval": {
+          "strategy": "hybrid"
+        },
+        "source_conflicts": []
+      }
+    },
+    {
+      "question": "What does Section 4.3 require employees to do after a nuclear event?",
+      "response": {
+        "answer": "Section 4.3 requires employees to remain indoors, away from windows, for a minimum of two weeks following any nuclear event. Venturing outside before the two-week mark is prohibited except for verified emergency personnel.",
+        "citations": [
+          {
+            "document": "Preparedness Policy",
+            "version": "2.0",
+            "section": "4.3 Duration of Sheltering"
+          }
+        ],
+        "retrieved_chunks": [
+          {
+            "section": "4.3 Duration of Sheltering",
+            "distance": 0.43521469831466675,
+            "document": "Preparedness Policy",
+            "version": "2.0"
+          },
+          {
+            "section": "6.2 Employee Expectations",
+            "distance": 0.4995625615119934,
+            "document": "Preparedness Policy",
+            "version": "2.0"
+          },
+          {
+            "section": "5.2 Duration and Exceptions",
+            "distance": 0.522386372089386,
+            "document": "Preparedness Policy",
+            "version": "2.0"
+          }
+        ],
+        "retrieval": {
+          "strategy": "hybrid"
+        },
+        "source_conflicts": []
+      }
+    },
+    {
+      "question": "Under Section 4.2, what does the foosball winner receive?",
+      "response": {
+        "answer": "Under Section 4.2, the foosball winner receives the loser's remaining token balance for the current cycle.",
+        "citations": [
+          {
+            "document": "Time & Usage Policy",
+            "version": "2.0",
+            "section": "4.2 Winner-Takes-Tokens Rule"
+          }
+        ],
+        "retrieved_chunks": [
+          {
+            "section": "4.2 Winner-Takes-Tokens Rule",
+            "distance": 0.4012601375579834,
+            "document": "Time & Usage Policy",
+            "version": "2.0"
+          },
+          {
+            "section": "4.1 Daily Allowance",
+            "distance": 0.532068133354187,
+            "document": "Time & Usage Policy",
+            "version": "2.0"
+          },
+          {
+            "section": "8.2 Equipment Eligibility",
+            "distance": 0.5503056049346924,
+            "document": "Preparedness Policy",
+            "version": "2.0"
+          }
+        ],
+        "retrieval": {
+          "strategy": "hybrid"
+        },
+        "source_conflicts": []
+      }
+    },
+    {
+      "question": "What daily caffeine limit does Section 5.1 set?",
+      "response": {
+        "answer": "Section 5.1 sets a daily caffeine limit of 400 mg, which is roughly equivalent to four 8-ounce cups of brewed coffee.",
+        "citations": [
+          {
+            "document": "Health & Wellness Policy",
+            "version": "1.0",
+            "section": "5.1 Daily Limit"
+          }
+        ],
+        "retrieved_chunks": [
+          {
+            "section": "5.1 Daily Limit",
+            "distance": 0.30067020654678345,
+            "document": "Health & Wellness Policy",
+            "version": "1.0"
+          },
+          {
+            "section": "5.2 Monitoring and Tapering",
+            "distance": 0.32454246282577515,
+            "document": "Health & Wellness Policy",
+            "version": "1.0"
+          },
+          {
+            "section": "3.2 Suggested Weekly Split",
+            "distance": 0.6268271803855896,
+            "document": "Health & Wellness Policy",
+            "version": "1.0"
+          }
+        ],
+        "retrieval": {
+          "strategy": "hybrid"
+        },
+        "source_conflicts": []
+      }
     }
   ]
 }

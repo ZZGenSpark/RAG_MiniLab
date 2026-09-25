@@ -1,4 +1,4 @@
-"""Score retrieval recall and answer accuracy for the eight policy questions.
+"""Score retrieval recall and answer accuracy for the policy questions.
 
 Recall checks section labels. Accuracy checks that every answer marker is present.
 CI runs the questions with a fake generator. The CLI writes a live Ollama report.
@@ -154,6 +154,38 @@ RETRIEVAL_CASES = [
         ],
         answer_markers=["5 days", "dog"],
     ),
+    RetrievalCase(
+        question="What does Section 7.3 say happens to food left in the refrigerator over the weekend?",
+        expected_labels=[
+            ExpectedLabel(
+                document="HR Policy",
+                version="2.0",
+                section="7.3 Weekend Abandonment Consequence",
+            )
+        ],
+        answer_markers=["abandoned", "spoonful"],
+    ),
+    RetrievalCase(
+        question="What does Section 4.3 require employees to do after a nuclear event?",
+        expected_labels=[
+            ExpectedLabel(document="Preparedness Policy", version="2.0", section="4.3 Duration of Sheltering"),
+        ],
+        answer_markers=["two weeks"],
+    ),
+    RetrievalCase(
+        question="Under Section 4.2, what does the foosball winner receive?",
+        expected_labels=[
+            ExpectedLabel(document="Time & Usage Policy", version="2.0", section="4.2 Winner-Takes-Tokens Rule"),
+        ],
+        answer_markers=["token"],
+    ),
+    RetrievalCase(
+        question="What daily caffeine limit does Section 5.1 set?",
+        expected_labels=[
+            ExpectedLabel(document="Health & Wellness Policy", version="1.0", section="5.1 Daily Limit"),
+        ],
+        answer_markers=["400 mg"],
+    ),
 ]
 
 
@@ -254,7 +286,7 @@ def run_eval(
     reranker: Reranker | None = None,
     audit_path: Path | None = None,
 ) -> EvalReport:
-    """Ask each of the eight questions and keep the responses for scoring."""
+    """Ask each evaluation question and keep the responses for scoring."""
     results = []
     for case in RETRIEVAL_CASES:
         response = ask(
@@ -280,7 +312,7 @@ def write_eval_report(
     reranker: Reranker | None = None,
     audit_path: Path | None = None,
 ) -> Path:
-    """Run the eight questions and write the report JSON."""
+    """Run the evaluation questions and write the report JSON."""
     output_path = Path(path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     report = run_eval(
@@ -346,10 +378,10 @@ def response_from_result(result: dict) -> AskResponse:
 
 
 def main() -> None:
-    """Ask the eight questions with Ollama and write outputs/eval_report.json."""
+    """Ask the evaluation questions with Ollama and write outputs/eval_report.json."""
     from adapter.sentence_transformer_embeddings import SentenceTransformerEmbeddingAdapter
 
-    parser = argparse.ArgumentParser(description="Run the eight evaluation questions and save the report.")
+    parser = argparse.ArgumentParser(description="Run the evaluation questions and save the report.")
     parser.add_argument(
         "--output",
         type=Path,

@@ -8,7 +8,17 @@ Answer:
 
 > The provided policy does not answer this question.
 
-The response has no citations. Retrieval used the vector strategy. These are the chunk ids sent to the model, in rerank order:
+The response has no citations. Jev's choice for this ask is `vector`, recorded on the response as `retrieval.strategy` and on the audit row as `strategy`:
+
+```json
+{
+  "retrieval": {
+    "strategy": "vector"
+  }
+}
+```
+
+These are the chunk ids sent to the model, in rerank order:
 
 - `time-and-usage-policy:v1.0:section-5.1`
 - `time-and-usage-policy:v2.0:section-6.1`
