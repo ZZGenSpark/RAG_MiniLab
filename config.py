@@ -41,6 +41,13 @@ EMBED_MODEL = os.getenv("OLLAMA_EMBED_MODEL", f"{EMBED_MODEL_NAME}:{EMBED_MODEL_
 CHAT_MODEL = os.getenv("OLLAMA_CHAT_MODEL", f"{CHAT_MODEL_NAME}:{CHAT_MODEL_VERSION}")
 CHAT_TEMPERATURE = 0
 
+# Local embeddings for the lab. all-MiniLM-L6-v2 is 384-dimensional and is stored in cosine space.
+# The Ollama embedder above stays available and is not this path.
+SENTENCE_TRANSFORMER_MODEL = os.getenv(
+    "SENTENCE_TRANSFORMER_MODEL",
+    "sentence-transformers/all-MiniLM-L6-v2",
+)
+
 # Retrieval
 TOP_K = 3
 
