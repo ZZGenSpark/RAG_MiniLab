@@ -7,9 +7,10 @@ import pytest
 
 from adapter.chroma_store import ChromaPolicyStore
 from adapter.ollama_chat import OllamaChatAdapter
-from config import CHAT_TEMPERATURE
+from config import CHAT_TEMPERATURE, POLICIES_DIR
 from prompt.grounded_excerpt import INSTRUCTION, build_grounded_excerpt_prompt
 from rag.ask import ask
+from rag.chunking import chunk_policy_file
 from rag.generate import REFUSAL_ANSWER, build_prompt, generate_answer
 from rag.route import FallbackRouter, RetrievalDecision, Strategy
 from rag.schema import PolicyChunk, RetrievedChunk
@@ -159,6 +160,86 @@ def test_number_from_the_question_is_allowed_when_that_excerpt_is_cited() -> Non
     )
     assert citations[0].section == "6. Boss Error Grace Period"
     assert "30" in answer
+
+
+def test_conflicting_token_amounts_are_refused_when_the_model_picks_one() -> None:
+    """Refuse 1,000,000 versus 500,000 even when the model chooses the later amount."""
+    chat = FakeGenerator(_answer("Each employee receives 500,000 tokens.", [2]))
+    answer, citations = generate_answer(
+        "How many tokens does each employee receive at the start of a cycle?",
+        [
+            _policy_section("time-and-usage-policy-v1.0.md", "5.1"),
+            _policy_section("time-and-usage-policy-v2.0.md", "6.1"),
+        ],
+        generator=chat,
+    )
+    assert answer == REFUSAL_ANSWER
+    assert citations == []
+    assert len(chat.prompts) == 1
+    assert "disagree" in chat.prompts[0]
+
+
+def test_conflicting_shelter_times_are_refused_when_the_model_picks_one() -> None:
+    """Refuse two hours versus two weeks even when the model chooses the later duration."""
+    chat = FakeGenerator(_answer("Employees stay indoors for two weeks.", [1]))
+    answer, citations = generate_answer(
+        "How long do employees stay indoors after a nuclear event?",
+        [
+            _policy_section("preparedness-policy-v2.0.md", "4.3"),
+            _policy_section("preparedness-policy-v1.0.md", "4.2"),
+        ],
+        generator=chat,
+    )
+    assert answer == REFUSAL_ANSWER
+    assert citations == []
+
+
+def test_agreeing_foosball_allowances_keep_the_model_answer() -> None:
+    """Answer when both versions cap foosball at 20 minutes."""
+    chat = FakeGenerator(_answer("Foosball is capped at 20 minutes per day.", [1, 2]))
+    answer, citations = generate_answer(
+        "How long can an employee play foosball each day?",
+        [
+            _policy_section("time-and-usage-policy-v1.0.md", "4.1"),
+            _policy_section("time-and-usage-policy-v2.0.md", "4.1"),
+            _policy_section("time-and-usage-policy-v1.0.md", "3.1"),
+        ],
+        generator=chat,
+    )
+    assert "20 minutes" in answer
+    assert [citation.version for citation in citations] == ["1.0", "2.0"]
+
+
+def test_rewritten_refrigerator_rules_are_refused() -> None:
+    """Refuse when version 1 leaves the refrigerator alone and version 2 requires a spoonful."""
+    chat = FakeGenerator(_answer("The food is abandoned and the employee eats a spoonful.", [1]))
+    answer, citations = generate_answer(
+        "What happens to food left in the shared refrigerator over the weekend?",
+        [
+            _policy_section("hr-policy-v2.0.md", "7.3"),
+            _policy_section("hr-policy-v1.0.md", "7"),
+            _policy_section("hr-policy-v2.0.md", "7.1"),
+        ],
+        generator=chat,
+    )
+    assert answer == REFUSAL_ANSWER
+    assert citations == []
+
+
+def test_agreeing_joke_rules_keep_the_model_answer() -> None:
+    """Answer when both HR versions require a joke."""
+    chat = FakeGenerator(_answer("Every email must include a joke.", [1, 2]))
+    answer, citations = generate_answer(
+        "Does every company email have to include a joke?",
+        [
+            _policy_section("hr-policy-v1.0.md", "3.1"),
+            _policy_section("hr-policy-v2.0.md", "3.1"),
+            _policy_section("hr-policy-v2.0.md", "3.2"),
+        ],
+        generator=chat,
+    )
+    assert "joke" in answer
+    assert [citation.section for citation in citations] == ["3.1 Requirement", "3.1 Requirement"]
 
 
 def test_prompt_lists_every_final_excerpt() -> None:
@@ -317,6 +398,21 @@ def test_ollama_chat_adapter_rejects_an_empty_response() -> None:
 
     with pytest.raises(ValueError, match="empty response"):
         OllamaChatAdapter(client=EmptyClient()).complete("Question: email")
+
+
+def _policy_section(filename: str, section: str) -> RetrievedChunk:
+    """Load one numbered rule from the checked-in policies."""
+    chunk = next(item for item in chunk_policy_file(POLICIES_DIR / filename) if item.section == section)
+    return RetrievedChunk(
+        chunk_id=chunk.chunk_id,
+        document=chunk.document,
+        version=chunk.version,
+        section=chunk.section,
+        section_title=chunk.section_title,
+        parent_heading=chunk.parent_heading,
+        text=chunk.text,
+        distance=0.1,
+    )
 
 
 def _store(tmp_path) -> ChromaPolicyStore:

@@ -94,7 +94,7 @@ def write_policy(source: str | Path, dest_dir: str | Path) -> Path:
 
 
 def _require_allowlisted(path: Path) -> None:
-    """Reject files that are not one of the five ingested policies."""
+    """Reject files that are not one of the ingested policies."""
     if path.name not in ALLOWED_NAMES:
         raise ValueError(f"{path.name} is not an allowlisted policy")
 
@@ -187,7 +187,7 @@ def _markdown_name(markdown: str) -> str:
 
 
 def main() -> None:
-    """Write markdown for the five allowlisted policies."""
+    """Write markdown for the allowlisted policies."""
     parser = argparse.ArgumentParser(description="Write markdown for the allowlisted policy files.")
     parser.add_argument(
         "--dest",

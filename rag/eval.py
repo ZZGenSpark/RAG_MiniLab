@@ -59,9 +59,14 @@ RETRIEVAL_CASES = [
                 document="HR Policy",
                 version="2.0",
                 section="7.3 Weekend Abandonment Consequence",
-            )
+            ),
+            ExpectedLabel(
+                document="HR Policy",
+                version="1.0",
+                section="7. Shared Refrigerator Policy",
+            ),
         ],
-        answer_markers=["abandoned", "spoonful"],
+        answer_markers=[REFUSAL_ANSWER],
     ),
     RetrievalCase(
         question="How long can an employee play foosball each day?",
@@ -101,8 +106,9 @@ RETRIEVAL_CASES = [
         question="How long do employees stay indoors after a nuclear event?",
         expected_labels=[
             ExpectedLabel(document="Preparedness Policy", version="2.0", section="4.3 Duration of Sheltering"),
+            ExpectedLabel(document="Preparedness Policy", version="1.0", section="4.2 All-Clear Timing"),
         ],
-        answer_markers=["two weeks"],
+        answer_markers=[REFUSAL_ANSWER],
     ),
     RetrievalCase(
         question="How much paid time off do I get when I adopt a pet?",
@@ -126,8 +132,9 @@ RETRIEVAL_CASES = [
         question="What does Section 4.3 require employees to do after a nuclear event?",
         expected_labels=[
             ExpectedLabel(document="Preparedness Policy", version="2.0", section="4.3 Duration of Sheltering"),
+            ExpectedLabel(document="Preparedness Policy", version="1.0", section="4.2 All-Clear Timing"),
         ],
-        answer_markers=["two weeks"],
+        answer_markers=[REFUSAL_ANSWER],
     ),
     RetrievalCase(
         question="Under Section 4.2, what does the foosball winner receive?",
@@ -142,6 +149,14 @@ RETRIEVAL_CASES = [
             ExpectedLabel(document="Health & Wellness Policy", version="1.0", section="5.1 Daily Limit"),
         ],
         answer_markers=["400 mg"],
+    ),
+    RetrievalCase(
+        question="How many tokens does each employee receive at the start of a cycle?",
+        expected_labels=[
+            ExpectedLabel(document="Time & Usage Policy", version="1.0", section="5.1 Allocation Amount"),
+            ExpectedLabel(document="Time & Usage Policy", version="2.0", section="6.1 Allocation Amount"),
+        ],
+        answer_markers=[REFUSAL_ANSWER],
     ),
 ]
 

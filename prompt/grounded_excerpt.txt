@@ -1,5 +1,6 @@
 Do the policy excerpts below answer the question?
 Answer using only these excerpts. Do not use outside knowledge.
+If excerpts from the same document disagree, set answerable to false. Do not choose one version.
 
 Return JSON with keys:
 - answerable: true when the excerpts answer the question, false otherwise

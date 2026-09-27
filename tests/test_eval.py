@@ -61,7 +61,7 @@ def test_refusal_marker_matches_the_canonical_refusal() -> None:
 
 def test_answer_accuracy_requires_every_marker() -> None:
     """Count a case only when the answer contains every marker."""
-    weekend = RETRIEVAL_CASES[0]
+    weekend = next(case for case in RETRIEVAL_CASES if case.question.startswith("What does Section 7.3"))
     refusal = next(case for case in RETRIEVAL_CASES if not case.expected_labels)
     assert answer_accuracy([(weekend, "The food is abandoned. Eat a spoonful.")]) == 1.0
     assert answer_accuracy([(weekend, "The food is abandoned.")]) == 0.0
@@ -124,7 +124,10 @@ def test_evaluate_retrieval_records_a_missing_section(monkeypatch: pytest.Monkey
     assert report.recall < 1.0
     assert not retrieval_eval_passed(report)
     missed = next(result for result in report.results if result.question == weekend.question)
-    assert missed.missing == ["HR Policy v2.0 7.3 Weekend Abandonment Consequence"]
+    assert missed.missing == [
+        "HR Policy v2.0 7.3 Weekend Abandonment Consequence",
+        "HR Policy v1.0 7. Shared Refrigerator Policy",
+    ]
     assert missed.retrieved == []
     assert all(result.recalled for result in report.results if result is not missed)
 
@@ -212,6 +215,8 @@ class MarkerGenerator:
         case = next(case for case in RETRIEVAL_CASES if case.question == question)
         if not case.expected_labels:
             return json.dumps({"answerable": False, "answer": "", "sources": []})
+        if case.answer_markers == [REFUSAL_ANSWER]:
+            return json.dumps({"answerable": True, "answer": "The later policy applies.", "sources": [1]})
         excerpt_count = len([line for line in prompt.splitlines() if line.startswith("Excerpt ")])
         return json.dumps(
             {

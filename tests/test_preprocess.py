@@ -30,17 +30,17 @@ def test_glued_pdf_fragment_splits_purpose_from_body() -> None:
     assert "PurposeThis" not in markdown
 
 
-def test_allowlist_has_the_five_ingested_policies() -> None:
-    """Leave HR v1 and Preparedness v1 out of preprocessing."""
+def test_allowlist_includes_every_policy_file() -> None:
+    """Preprocess all seven policy files, including the older HR and preparedness copies."""
     names = [path.name for path in INGEST_SOURCES]
-    assert len(names) == 5
-    assert not any(name.startswith("Doofenshmirtz Evil Inc - HR Policy v1") for name in names)
-    assert not any("Preparedness Policy v1" in name for name in names)
+    assert len(names) == 7
+    assert any(name.startswith("Doofenshmirtz Evil Inc - HR Policy v1") for name in names)
+    assert any("Preparedness Policy v1" in name for name in names)
 
 
 def test_excluded_binary_is_rejected(tmp_path: Path) -> None:
     """Refuse to convert a policy that is not on the allowlist."""
-    excluded = SOURCE_DIR / "Doofenshmirtz Evil Inc - HR Policy v1.0 1.pdf"
+    excluded = SOURCE_DIR / "Doofenshmirtz Evil Inc - Unlisted Policy v9.0.pdf"
     with pytest.raises(ValueError, match="not an allowlisted policy"):
         write_policy(excluded, tmp_path)
 
@@ -153,12 +153,14 @@ def test_write_policy_rejects_a_non_document_suffix(tmp_path: Path, monkeypatch:
 
 
 def test_write_policies_matches_the_checked_in_markdown(tmp_path: Path) -> None:
-    """Regenerate the five policies and keep the checked-in markdown unchanged."""
+    """Regenerate the policies and keep the checked-in markdown unchanged."""
     written = write_policies(dest_dir=tmp_path)
     assert [path.name for path in written] == [
         "hr-policy-v2.0.md",
+        "hr-policy-v1.0.md",
         "health-and-wellness-policy-v1.0.md",
         "preparedness-policy-v2.0.md",
+        "preparedness-policy-v1.0.md",
         "time-and-usage-policy-v2.0.md",
         "time-and-usage-policy-v1.0.md",
     ]

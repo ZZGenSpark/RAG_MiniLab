@@ -18,11 +18,13 @@ REPO_ROOT = Path(__file__).resolve().parent
 # Paths. The lab corpus is the markdown under source/policies/.
 SOURCE_DIR = REPO_ROOT / "source"
 POLICIES_DIR = SOURCE_DIR / "policies"
-# Five policies are preprocessed into markdown. HR v1 and Preparedness v1 stay binaries.
+# Every policy file is preprocessed into markdown, including older versions.
 INGEST_SOURCES = (
     SOURCE_DIR / "Doofenshmirtz Evil Inc - HR Policy v2.0.docx",
+    SOURCE_DIR / "Doofenshmirtz Evil Inc - HR Policy v1.0 1.pdf",
     SOURCE_DIR / "Doofenshmirtz Evil Inc - Health Policy v1.0 1.pdf",
     SOURCE_DIR / "Doofenshmirtz Evil Inc - Preparedness Policy v2.0 1.docx",
+    SOURCE_DIR / "Doofenshmirtz Evil Inc - Preparedness Policy v1.0.pdf",
     SOURCE_DIR / "Doofenshmirtz Evil Inc - Time and Usage Policy v2.0 1.docx",
     SOURCE_DIR / "Doofenshmirtz Evil Inc - Time and Usage Policy v1.0 1.pdf",
 )
