@@ -1,0 +1,10 @@
+Do the policy excerpts below answer the question?
+Answer using only these excerpts. Do not use outside knowledge.
+If excerpts from the same document disagree, set answerable to false. Do not choose one version.
+
+Return JSON with keys:
+- answerable: true when the excerpts answer the question, false otherwise
+- answer: the grounded answer when answerable is true, otherwise an empty string
+- sources: the 1-based excerpt numbers you used, in the order you used them
+
+Cite every excerpt the answer uses. Omit excerpts you do not use.

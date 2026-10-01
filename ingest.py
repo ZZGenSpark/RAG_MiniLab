@@ -1,19 +1,25 @@
+"""Command-line entry point that loads source/policies into Chroma."""
+
 from __future__ import annotations
 
 import argparse
 from pathlib import Path
 
-from rag.config import DEFAULT_POLICY_PATH
-from rag.ingest import ingest_policy
+from adapter.chroma_store import ChromaPolicyStore
+from config import CHROMA_PATH, POLICIES_DIR
+from rag.ingest import ingest_corpus
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Ingest policy.md into Chroma with Ollama embeddings.")
+    """Parse CLI arguments and ingest the markdown policies."""
+    parser = argparse.ArgumentParser(
+        description="Ingest markdown policies from source/policies into Chroma with MiniLM embeddings."
+    )
     parser.add_argument(
-        "--policy",
+        "--policies",
         type=Path,
-        default=DEFAULT_POLICY_PATH,
-        help="Path to the policy markdown file.",
+        default=POLICIES_DIR,
+        help="Directory of markdown policies. Defaults to source/policies.",
     )
     parser.add_argument(
         "--chroma-path",
@@ -23,7 +29,8 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    chunk_ids = ingest_policy(args.policy, chroma_path=args.chroma_path)
+    store = ChromaPolicyStore(args.chroma_path or CHROMA_PATH)
+    chunk_ids = ingest_corpus(args.policies, store=store)
     print(f"Ingested {len(chunk_ids)} policy chunks:")
     for chunk_id in chunk_ids:
         print(f"  {chunk_id}")

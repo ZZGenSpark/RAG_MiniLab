@@ -1,13 +1,20 @@
+"""Data models for policy chunks, citations, and ask responses.
+
+Defines the Chroma record shape and checks ids, metadata, and ranking.
+"""
+
 from __future__ import annotations
 
-from typing import Sequence
+from collections.abc import Sequence
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-COLLECTION_NAME = "expense_policy"
-DISTANCE_SPACE = "cosine"
+from config import DISTANCE_SPACE, TOP_K
+from rag.slug import slugify
+
 COLLECTION_METADATA = {"hnsw:space": DISTANCE_SPACE}
-CHUNK_ID_PREFIX = "expense-policy"
+VERSION_PATTERN = r"\d+\.\d+"
 
 
 class ChunkMetadata(BaseModel):
@@ -16,12 +23,20 @@ class ChunkMetadata(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     document: str = Field(min_length=1)
-    version: str = Field(pattern=r"^\d+\.\d+$")
-    section: str = Field(pattern=r"^\d+$")
+    version: str = Field(pattern=rf"^{VERSION_PATTERN}$")
+    section: str = Field(pattern=r"^\d+(?:\.\d+)?$")
     section_title: str = Field(min_length=1)
+    parent_heading: str = ""
 
     @property
     def citation_section(self) -> str:
+        """Return the numbered section label used in citations.
+
+        A parent section is `6. Boss Error Grace Period`. A numbered rule is
+        `7.3 Weekend Abandonment Consequence`.
+        """
+        if "." in self.section:
+            return f"{self.section} {self.section_title}"
         return f"{self.section}. {self.section_title}"
 
 
@@ -35,18 +50,21 @@ class PolicyChunk(ChunkMetadata):
     text: str = Field(min_length=1)
 
     @model_validator(mode="after")
-    def chunk_id_matches_version_and_section(self) -> PolicyChunk:
-        expected = f"{CHUNK_ID_PREFIX}:v{self.version}:section-{self.section}"
+    def chunk_id_matches_document_version_and_section(self) -> PolicyChunk:
+        """Require the chunk id to encode the document slug, version, and section."""
+        expected = f"{slugify(self.document)}:v{self.version}:section-{self.section}"
         if self.chunk_id != expected:
             raise ValueError(f"chunk_id must be {expected}")
         return self
 
     def to_metadata(self) -> ChunkMetadata:
+        """Return the citation fields stored with this chunk."""
         return ChunkMetadata(
             document=self.document,
             version=self.version,
             section=self.section,
             section_title=self.section_title,
+            parent_heading=self.parent_heading,
         )
 
 
@@ -63,6 +81,7 @@ class EmbeddedChunk(PolicyChunk):
         metadata: dict[str, object],
         embedding: Sequence[float],
     ) -> EmbeddedChunk:
+        """Build an embedded chunk from a stored Chroma record."""
         return cls.model_validate(
             {
                 "chunk_id": chunk_id,
@@ -85,6 +104,7 @@ class ChromaRecords(BaseModel):
 
     @model_validator(mode="after")
     def aligned_record_fields(self) -> ChromaRecords:
+        """Require ids, documents, embeddings, and metadata to match in length."""
         lengths = {
             len(self.ids),
             len(self.documents),
@@ -96,6 +116,7 @@ class ChromaRecords(BaseModel):
         return self
 
     def as_upsert(self) -> dict[str, list]:
+        """Return the fields Chroma expects for an upsert."""
         return {
             "ids": self.ids,
             "documents": self.documents,
@@ -108,8 +129,8 @@ class Citation(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     document: str = Field(min_length=1)
-    version: str = Field(pattern=r"^\d+\.\d+$")
-    section: str = Field(min_length=1, pattern=r"^\d+\.\s+.+$")
+    version: str = Field(pattern=rf"^{VERSION_PATTERN}$")
+    section: str = Field(min_length=1, pattern=r"^(?:\d+\.\s+|\d+\.\d+\s+).+$")
 
 
 class RetrievedChunkRef(BaseModel):
@@ -117,6 +138,8 @@ class RetrievedChunkRef(BaseModel):
 
     section: str = Field(min_length=1)
     distance: float
+    document: str = ""
+    version: str = ""
 
 
 class RetrievedChunk(PolicyChunk):
@@ -125,19 +148,43 @@ class RetrievedChunk(PolicyChunk):
     distance: float
 
     def to_ref(self) -> RetrievedChunkRef:
-        return RetrievedChunkRef(section=self.citation_section, distance=self.distance)
+        """Return the section label and distance for an ask response."""
+        return RetrievedChunkRef(
+            section=self.citation_section,
+            distance=self.distance,
+            document=self.document,
+            version=self.version,
+        )
 
 
 REFUSAL_ANSWER = "The provided policy does not answer this question."
 
 
 class GroundedModelOutput(BaseModel):
-    """JSON the generation model is asked to return for a single excerpt."""
+    """JSON the generation model returns for the final excerpts."""
 
     model_config = ConfigDict(extra="ignore")
 
     answerable: bool
     answer: str = ""
+    sources: list[int] = Field(default_factory=list)
+
+
+class RetrievalInfo(BaseModel):
+    """The route used for this ask. The only field is the strategy."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    strategy: Literal["vector", "hybrid"] = "vector"
+
+
+class SourceConflict(BaseModel):
+    """One document title retrieved at more than one version."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    document: str = Field(min_length=1)
+    versions: list[str] = Field(min_length=2)
 
 
 class AskResponse(BaseModel):
@@ -146,24 +193,47 @@ class AskResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     answer: str = Field(min_length=1)
-    citation: Citation | None
-    retrieved_chunks: list[RetrievedChunkRef] = Field(max_length=3)
+    citations: list[Citation] = Field(default_factory=list)
+    retrieved_chunks: list[RetrievedChunkRef] = Field(max_length=TOP_K)
+    retrieval: RetrievalInfo = Field(default_factory=RetrievalInfo)
+    source_conflicts: list[SourceConflict] = Field(default_factory=list)
 
     @field_validator("retrieved_chunks")
     @classmethod
     def distances_are_sorted(cls, chunks: list[RetrievedChunkRef]) -> list[RetrievedChunkRef]:
+        """Require retrieved chunks to be ordered by ascending distance."""
         distances = [chunk.distance for chunk in chunks]
         if distances != sorted(distances):
             raise ValueError("retrieved_chunks must be sorted by cosine distance ascending")
         return chunks
+
+    @model_validator(mode="after")
+    def citations_are_retrieved_sections(self) -> AskResponse:
+        """Require every citation to name a section that retrieval returned."""
+        retrieved = {chunk.section for chunk in self.retrieved_chunks}
+        if any(citation.section not in retrieved for citation in self.citations):
+            raise ValueError("citation section must be one of the retrieved chunks")
+        return self
+
+
+def require_uniform_embedding_width(embeddings: Sequence[Sequence[float]]) -> int | None:
+    """Return the shared vector width, or None when there are no embeddings."""
+    if not embeddings:
+        return None
+    width = len(embeddings[0])
+    if width < 1 or any(len(vector) != width for vector in embeddings):
+        raise ValueError("embeddings must share one non-zero width")
+    return width
 
 
 def to_chroma_records(
     chunks: Sequence[PolicyChunk],
     embeddings: Sequence[Sequence[float]],
 ) -> ChromaRecords:
+    """Pair chunks with embeddings into one Chroma upsert payload."""
     if len(chunks) != len(embeddings):
         raise ValueError("each chunk must have exactly one embedding vector")
+    require_uniform_embedding_width(embeddings)
 
     embedded = [
         EmbeddedChunk.model_validate({**chunk.model_dump(), "embedding": list(embedding)})

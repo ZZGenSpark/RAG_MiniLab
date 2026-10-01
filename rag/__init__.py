@@ -1,12 +1,19 @@
+"""Public API for the company-policy RAG pipeline.
+
+Re-exports ingest, retrieval, generation, and the shared schema types.
+"""
+
+from config import COLLECTION_NAME
 from rag.ask import ask
 from rag.chunking import chunk_policy, chunk_policy_file
 from rag.embeddings import Embedder
-from rag.generate import REFUSAL_ANSWER, generate_answer
-from rag.ingest import ingest_policy
+from rag.generate import generate_answer
+from rag.ingest import ingest_corpus, ingest_policy
 from rag.retrieve import retrieve
+from rag.route import RetrievalDecision, route
 from rag.schema import (
-    COLLECTION_NAME,
     DISTANCE_SPACE,
+    REFUSAL_ANSWER,
     AskResponse,
     Citation,
     EmbeddedChunk,
@@ -26,12 +33,15 @@ __all__ = [
     "PolicyChunk",
     "PolicyStore",
     "REFUSAL_ANSWER",
+    "RetrievalDecision",
     "RetrievedChunk",
     "RetrievedChunkRef",
     "ask",
     "chunk_policy",
     "chunk_policy_file",
     "generate_answer",
+    "ingest_corpus",
     "ingest_policy",
     "retrieve",
+    "route",
 ]
